@@ -32,32 +32,33 @@ use std::vec::Vec;
 use std::io::{self, Write};
 use std::slice;
 
-
 #[no_mangle]
-pub extern "C" fn calc_sha256(input_str: *const u8,
-                              some_len: usize,
-                              hash: &mut [u8;32]) -> sgx_status_t {
+pub extern "C" fn say_something(some_string: *const u8, some_len: usize) -> sgx_status_t {
 
-    println!("calc_sha256 invoked!");
+    let str_slice = unsafe { slice::from_raw_parts(some_string, some_len) };
+    let _ = io::stdout().write(str_slice);
 
-    // First, build a slice for input_str
-    let input_slice = unsafe { slice::from_raw_parts(input_str, some_len) };
+    // A sample &'static string
+    let rust_raw_string = "This is a in-Enclave ";
+    // An array
+    let word:[u8;4] = [82, 117, 115, 116];
+    // An vector
+    let word_vec:Vec<u8> = vec![32, 115, 116, 114, 105, 110, 103, 33];
 
-    // slice::from_raw_parts does not guarantee the length, we need a check
-    if input_slice.len() != some_len {
-        return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+    // Construct a string from &'static string
+    let mut hello_string = String::from(rust_raw_string);
+
+    // Iterate on word array
+    for c in word.iter() {
+        hello_string.push(*c as char);
     }
 
-    println!("Input string len = {}, input len = {}", input_slice.len(), some_len);
+    // Rust style convertion
+    hello_string += String::from_utf8(word_vec).expect("Invalid UTF-8")
+                                               .as_str();
 
-    // Second, convert the vector to a slice and calculate its SHA256
-    let result = rsgx_sha256_slice(&input_slice);
-
-    // Third, copy back the result
-    match result {
-        Ok(output_hash) => *hash = output_hash,
-        Err(x) => return x
-    }
+    // Ocall to normal world for output
+    println!("{}", &hello_string);
 
     sgx_status_t::SGX_SUCCESS
 }

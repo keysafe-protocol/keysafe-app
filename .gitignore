@@ -1,0 +1,6 @@
+app/Enclave_u.c
+app/Enclave_u.h
+app/Enclave_u.o
+enclave/Enclave_t.c
+enclave/Enclave_t.h
+lib/libEnclave_u.a

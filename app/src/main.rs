@@ -46,8 +46,6 @@ type Users = Arc<RwLock<HashMap<sgx_enclave_id_t, mpsc::UnboundedSender<Message>
 async fn main() {
     pretty_env_logger::init();
     let users = Users::default();
-    // TODO: remove
-    let users = warp::any().map(move || users.clone());
 
     let conn = warp::path("conn")
         // The `ws()` filter will prepare Websocket handshake...
@@ -58,30 +56,11 @@ async fn main() {
             ws.on_upgrade(move |socket| user_connected(socket, users))
         });
         
+    // keep an index page to make sure warp is working
     let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
     let routes = index.or(conn);
     warp::serve(routes).run(([127, 0, 0, 1], 12345)).await;
-
-    /*
-    let input_string = String::from("This is a normal world string passed into Enclave!\n");
-    let mut retval = sgx_status_t::SGX_SUCCESS;
-        
-    let result = unsafe {
-        say_something(enclave.geteid(),
-                      &mut retval,
-                      input_string.as_ptr() as * const u8,
-                      input_string.len())
-    };
-    match result {
-        sgx_status_t::SGX_SUCCESS => {},
-        _ => {
-            println!("[-] ECALL Enclave Failed {}!", result.as_str());
-            return;
-        }
-    }
-    println!("[+] say_something success...");
-    enclave.destroy();
-    */
+    
 }
 
 async fn user_connected(ws: WebSocket, users: Users) {
@@ -128,26 +107,33 @@ async fn user_connected(ws: WebSocket, users: Users) {
 
     // Every time the user sends a message, broadcast it to
     // all other users...
-    while let Some(result) = user_ws_rx.next().await {
-        let msg = match result {
+    while let Some(user_msg) = user_ws_rx.next().await {
+        let msg = match user_msg {
             Ok(msg) => msg,
             Err(e) => {
                 eprintln!("websocket error(uid={}): {}", my_id, e);
                 break;
             }
         };
-        user_message(my_id, msg, &users).await;
+        // user_message(my_id, msg, &users).await;
+        let mut retval = sgx_status_t::SGX_SUCCESS;
+        let result = unsafe {
+            say_something(enclave.geteid(),
+                          &mut retval,
+                          msg.as_ptr() as * const u8,
+                          msg.len())
+        };
+        match result {
+            sgx_status_t::SGX_SUCCESS => {},
+            _ => {
+                println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                return;
+            }
+        }
     }
 
-    // user_ws_rx stream will keep processing as long as the user stays
-    // connected. Once they disconnect, then...
-    user_disconnected(my_id, &users).await;
-}
-
-async fn user_disconnected(my_id: usize, users: &Users) {
-    eprintln!("good bye user: {}", my_id);
-
-    // Stream closed up, so remove from the user list
+    // when disconnect, remote from users list
+    enclave.destroy();
     users.write().await.remove(&my_id);
 }
 
@@ -164,3 +150,14 @@ fn init_enclave() -> SgxResult<SgxEnclave> {
                        &mut launch_token_updated,
                        &mut misc_attr)
 }
+
+static INDEX_HTML: &str = r#"<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Warp Index Page</title>
+    </head>
+    <body>
+        <h1>Warp is working fine!</h1>
+    </body>
+</html>
+"#;

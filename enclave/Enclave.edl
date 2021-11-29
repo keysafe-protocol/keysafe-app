@@ -20,14 +20,10 @@ enclave {
     from "sgx_stdio.edl" import *;
     from "sgx_backtrace.edl" import *;
     from "sgx_tstdc.edl" import *;
-
     trusted {
         /* define ECALLs here. */
 
-        public sgx_status_t encrypt([in, size=len] const uint8_t* input_str,
-                                    size_t len,
-                                    [out] uint8_t hash[32]);
-
+        public sgx_status_t say_something([in, size=len] const uint8_t* some_string, size_t len);
+        
     };
-
 };
