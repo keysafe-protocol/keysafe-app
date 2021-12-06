@@ -20,17 +20,11 @@ extern crate sgx_urts;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
 
-use std::collections::HashMap;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
-
-use futures_util::{SinkExt, StreamExt, TryFutureExt, FutureExt};
+use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use warp::ws::{Message, WebSocket};
 use warp::Filter;
+use warp::ws::{Message, WebSocket};
 
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
@@ -38,103 +32,6 @@ static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 extern {
     fn say_something(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
                      some_string: *const u8, len: usize) -> sgx_status_t;
-}
-
-type Users = Arc<RwLock<HashMap<sgx_enclave_id_t, mpsc::UnboundedSender<Message>>>>;
-
-#[tokio::main]
-async fn main() {
-    pretty_env_logger::init();
-    let users = Users::default();
-
-    let conn = warp::path("conn")
-        // The `ws()` filter will prepare Websocket handshake...
-        .and(warp::ws())
-        .and(users)
-        .map(|ws: warp::ws::Ws, users| {
-            // This will call our function if the handshake succeeds.
-            ws.on_upgrade(move |socket| user_connected(socket, users))
-        });
-        
-    // keep an index page to make sure warp is working
-    let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
-    let routes = index.or(conn);
-    warp::serve(routes).run(([127, 0, 0, 1], 12345)).await;
-    
-}
-
-async fn user_connected(ws: WebSocket, users: Users) {
-
-    let enclave = match init_enclave() {
-        Ok(r) => {
-            println!("[+] Init Enclave Successful {}!", r.geteid());
-            r
-        },
-        Err(x) => {
-            println!("[-] Init Enclave Failed {}!", x.as_str());
-            return;
-        },
-    };
-
-    // Use a counter to assign a new unique ID for this user.
-    let my_id = enclave.geteid();
-    eprintln!("new user with enclave id: {}", my_id);
-
-    // Split the socket into a sender and receive of messages.
-    let (mut user_ws_tx, mut user_ws_rx) = ws.split();
-    
-    // Use an unbounded channel to handle buffering and flushing of messages
-    // to the websocket...
-    let (tx, rx) = mpsc::unbounded_channel();
-    let mut rx = UnboundedReceiverStream::new(rx);
-
-    tokio::task::spawn(async move {
-        while let Some(message) = rx.next().await {
-            user_ws_tx
-                .send(message)
-                .unwrap_or_else(|e| {
-                    eprintln!("websocket send error: {}", e);
-                })
-                .await;
-        }
-    });
-
-    // Save the sender in our list of connected users.
-    users.write().await.insert(my_id, tx);
-
-    // Return a `Future` that is basically a state machine managing
-    // this specific user's connection.
-
-    // Every time the user sends a message, broadcast it to
-    // all other users...
-    while let Some(user_msg) = user_ws_rx.next().await {
-        let msg = match user_msg {
-            Ok(msg) => msg,
-            Err(e) => {
-                eprintln!("websocket error(uid={}): {}", my_id, e);
-                break;
-            }
-        };
-        // user_message(my_id, msg, &users).await;
-        let mut retval = sgx_status_t::SGX_SUCCESS;
-        let result = unsafe {
-            say_something(enclave.geteid(),
-                          &mut retval,
-                          msg.as_ptr() as * const u8,
-                          msg.len())
-        };
-        match result {
-            sgx_status_t::SGX_SUCCESS => {},
-            _ => {
-                println!("[-] ECALL Enclave Failed {}!", result.as_str());
-                return;
-            }
-        }
-    }
-
-    // when disconnect, remote from users list
-    enclave.destroy();
-    users.write().await.remove(&my_id);
 }
 
 fn init_enclave() -> SgxResult<SgxEnclave> {
@@ -151,13 +48,104 @@ fn init_enclave() -> SgxResult<SgxEnclave> {
                        &mut misc_attr)
 }
 
+
+async fn save_key(ws: WebSocket) {
+
+    println!("Websocket connected successfully!");
+
+    let enclave = match init_enclave() {
+        Ok(r) => {
+            println!("[+] Init Enclave Successful {}!", r.geteid());
+            r
+        },
+        Err(x) => {
+            println!("[-] Init Enclave Failed {}!", x.as_str());
+            return;
+        },
+    };
+
+    let (mut user_ws_tx, mut user_ws_rx) = ws.split();
+    let (tx, rx) = mpsc::unbounded_channel();
+    let mut rx = UnboundedReceiverStream::new(rx);
+
+    tokio::task::spawn(async move {
+        while let Some(message) = rx.next().await {
+            user_ws_tx
+                .send(message)
+                .unwrap_or_else(|e| {
+                    eprintln!("websocket send error: {}", e);
+                })
+                .await;
+        }
+    });
+
+    // Every time the user sends a message, broadcast it to
+    // all other users...
+    while let Some(result) = user_ws_rx.next().await {
+        let msg = match result {
+            Ok(msg) => msg,
+            Err(e) => {
+                eprintln!("websocket error(uid={}): {}", enclave.geteid(), e);
+                break;
+            }
+        };
+        match msg.to_str() {
+            Ok(strmsg) => user_message(enclave.geteid(), strmsg.to_string()),
+            Err(e) => {
+                eprintln!("user send not a text msg");
+                break;
+            }
+        }
+    }
+    enclave.destroy();   
+}
+
+fn user_message(eid: sgx_enclave_id_t, msg: String) {
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+
+    let result = unsafe {
+        say_something(eid,
+                      &mut retval,
+                      msg.as_ptr() as * const u8,
+                      msg.len())
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {},
+        _ => {
+            println!("[-] ECALL Enclave Failed {}!", result.as_str());
+            return;
+        }
+    }
+
+}
+
+#[tokio::main]
+async fn main() {
+    
+    let save = warp::path("save")
+        .and(warp::ws())
+        .map(|ws: warp::ws::Ws| {
+            ws.on_upgrade(move |socket| save_key(socket))
+        });
+
+    let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
+    let routes = index.or(save);
+
+    warp::serve(routes)
+        .tls()
+        .cert_path("certs/server.crt")
+        .key_path("certs/server.key")
+        .run(([0, 0, 0, 0], 12345))
+        .await;
+}
+
 static INDEX_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
     <head>
-        <title>Warp Index Page</title>
+        <title>Warp Health Check</title>
     </head>
     <body>
-        <h1>Warp is working fine!</h1>
+        <h1>Warp is up and running.</h1>
     </body>
 </html>
 "#;
