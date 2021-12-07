@@ -1,4 +1,7 @@
 # keysafe-sgx
+# env setup
++ follow https://github.com/intel/linux-sgx#build-and-install-the-intelr-sgx-driver
++ install linux-sgx 
 # build
 + download baidu sgx-sdk with the name incubator-teaclave-sgx-sdk
 + copy the code into incubator-teaclave-sgx-sdk/samplecode
