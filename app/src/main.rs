@@ -90,7 +90,10 @@ async fn save_key(ws: WebSocket) {
             }
         };
         match msg.to_str() {
-            Ok(strmsg) => user_message(enclave.geteid(), strmsg.to_string()),
+            Ok(strmsg) => {
+                eprintln!("getting msg in warp: {}", strmsg.to_string());
+                user_message(enclave.geteid(), strmsg.to_string());
+            },
             Err(e) => {
                 eprintln!("user send not a text msg");
                 break;

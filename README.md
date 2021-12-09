@@ -8,6 +8,7 @@
 + make SGX_MODE=SW
 # execute
 + cd bin
++ ln -s ../certs .
 + ./app
 # test
 + download postman
