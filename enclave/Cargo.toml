@@ -7,6 +7,10 @@ authors = ["The Teaclave Authors"]
 name = "helloworldsampleenclave"
 crate-type = ["staticlib"]
 
+[dependencies]
+proc-macro2 = { version = "=1.0.32" }
+serde_json = { git = "https://github.com/mesalock-linux/serde-json-sgx" }
+
 [features]
 default = []
 
@@ -14,11 +18,12 @@ default = []
 sgx_types = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tstd = { git = "https://github.com/apache/teaclave-sgx-sdk.git", features = ["backtrace"] }
 sgx_trts = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_crypto_helper = { package = "sgx_tcrypto_helper", git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_alloc = { path = "../../../sgx_alloc" }
 sgx_build_helper = { path = "../../../sgx_build_helper" }
 sgx_cov = { path = "../../../sgx_cov" }
-sgx_crypto_helper = { path = "../../../sgx_crypto_helper" }
 sgx_libc = { path = "../../../sgx_libc" }
 sgx_rand = { path = "../../../sgx_rand" }
 sgx_rand_derive = { path = "../../../sgx_rand_derive" }

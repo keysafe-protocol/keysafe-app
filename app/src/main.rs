@@ -30,7 +30,7 @@ use warp::ws::{Message, WebSocket};
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 extern {
-    fn say_something(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
+    fn register_key(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
                      some_string: *const u8, len: usize) -> sgx_status_t;
 }
 
@@ -49,7 +49,7 @@ fn init_enclave() -> SgxResult<SgxEnclave> {
 }
 
 
-async fn save_key(ws: WebSocket) {
+async fn register_user(ws: WebSocket) {
 
     println!("Websocket connected successfully!");
 
@@ -107,10 +107,10 @@ fn user_message(eid: sgx_enclave_id_t, msg: String) {
     let mut retval = sgx_status_t::SGX_SUCCESS;
 
     let result = unsafe {
-        say_something(eid,
-                      &mut retval,
-                      msg.as_ptr() as * const u8,
-                      msg.len())
+        register_key(eid,
+            &mut retval,
+            msg.as_ptr() as * const u8,
+            msg.len())
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {},
@@ -126,14 +126,14 @@ fn user_message(eid: sgx_enclave_id_t, msg: String) {
 
 async fn main() {
     
-    let save = warp::path("save")
+    let register_url = warp::path("register")
         .and(warp::ws())
         .map(|ws: warp::ws::Ws| {
-            ws.on_upgrade(move |socket| save_key(socket))
+            ws.on_upgrade(move |socket| register_user(socket))
         });
 
     let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
-    let routes = index.or(save);
+    let routes = index.or(register_url);
 
     warp::serve(routes)
         .tls()
