@@ -10,6 +10,10 @@ crate-type = ["staticlib"]
 [dependencies]
 proc-macro2 = { version = "=1.0.32" }
 serde_json = { git = "https://github.com/mesalock-linux/serde-json-sgx" }
+sgx_types = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_trts = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_tstd = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_tcrypto = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 
 [features]
 default = []

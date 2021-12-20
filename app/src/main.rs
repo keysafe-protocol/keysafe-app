@@ -17,6 +17,8 @@
 
 extern crate sgx_types;
 extern crate sgx_urts;
+extern crate openssl;
+
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
 
@@ -26,6 +28,8 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::Filter;
 use warp::ws::{Message, WebSocket};
 
+use openssl::rsa::{Rsa, Padding};
+use openssl::symm::Cipher;
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
@@ -92,6 +96,7 @@ async fn register_user(ws: WebSocket) {
         match msg.to_str() {
             Ok(strmsg) => {
                 eprintln!("getting msg in warp: {}", strmsg.to_string());
+                let rsa = Rsa::public_key_from_pem(strmsg.to_string().as_bytes()).unwrap();
                 user_message(enclave.geteid(), strmsg.to_string());
             },
             Err(e) => {
@@ -123,7 +128,6 @@ fn user_message(eid: sgx_enclave_id_t, msg: String) {
 }
 
 #[tokio::main]
-
 async fn main() {
     
     let register_url = warp::path("register")
@@ -139,7 +143,7 @@ async fn main() {
         .tls()
         .cert_path("certs/server.crt")
         .key_path("certs/server.key")
-        .run(([0, 0, 0, 0], 12345))
+        .run(([0, 0, 0, 0], 12346))
         .await;
 }
 

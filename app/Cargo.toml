@@ -15,6 +15,7 @@ futures-util = { version = "=0.3.17", default-features = false, features = ["sin
 scoped-tls = "=1.0"
 tokio-rustls = { version = "=0.22" }
 proc-macro2 = { version = "=1.0.32" }
+openssl = "=0.10.28"
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }
