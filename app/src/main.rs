@@ -53,7 +53,7 @@ struct SafeMessage {
 }
 
 struct AppState {
-    enclave: SgxEnclave 
+    enclave: SgxEnclave
 }
 
 #[get("/")]
@@ -66,9 +66,10 @@ async fn hello() -> impl Responder {
 async fn app_exchange_key(
     path: web::Path<(String,)>,
     endex: web::Data<AppState>
-) -> impl Responder {
+) -> String {
     let e = &endex.enclave;
-    HttpResponse::Ok().body("Hello world!")
+    println!("enclave id {}, user pub key {}.", e.geteid(), path.into_inner().0);
+    String::from("SgxPubKey123")
 }
 
 #[post("/seal")]
@@ -82,9 +83,9 @@ async fn seal(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let edata = web::Data::new(Mutex::new(AppState{
+    let edata: web::Data<AppState> = web::Data::new(AppState{
         enclave: init_enclave()
-    }));    
+    });
 
     HttpServer::new(move || {
         App::new()
@@ -97,55 +98,3 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
-
-// #[tokio::main]
-// async fn main() {
-
-//     let enclave = match init_enclave() {
-//         Ok(r) => {
-//             println!("[+] Init Enclave Successful {}!", r.geteid());
-//             r
-//         },
-//         Err(x) => {
-//             println!("[-] Init Enclave Failed {}!", x.as_str());
-//             return;
-//         },
-//     };
-
-//     let exchange_key_url = warp::path("exchange_key")
-//         //.and(warp::path::param())
-//         .map(|| {
-//             //app_exchange_key(enclave.geteid(), param);
-//             warp::reply::html(INDEX_HTML);
-//         });
-
-//     let seal_key_url = warp::post()
-//         .and(warp::path("seal"))
-//         .and(warp::body::json())
-//         .map(|msg: SafeMessage| {
-//             app_seal_key(&msg);
-//             warp::reply::json(&msg);
-//         });
-    
-//     let unseal_key_url = warp::post()
-//         .and(warp::path("unseal"))
-//         .and(warp::body::json())
-//         .map(|msg: SafeMessage| {
-//             app_unseal_key(&msg);
-//             warp::reply::json(&msg);
-//         });
-
-//     let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
-    
-//     let routes = index
-//         .or(exchange_key_url)
-//         .or(seal_key_url)
-//         .or(unseal_key_url);
-
-//     warp::serve(exchange_key_url)
-//         // .tls()
-//         // .cert_path("certs/server.crt")
-//         // .key_path("certs/server.key")
-//         .run(([0, 0, 0, 0], 12346))
-//         .await;
-// }
