@@ -23,6 +23,7 @@ enclave {
     trusted {
         /* define ECALLs here. */
 
-        public sgx_status_t register_key([in, size=len] const uint8_t* some_string, size_t len);
+        public sgx_status_t exchange_key([in, size=len] const uint8_t* some_string, size_t len);
+
     };
 };
