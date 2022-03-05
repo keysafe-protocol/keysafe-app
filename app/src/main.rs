@@ -8,6 +8,8 @@ use sgx_urts::SgxEnclave;
 
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use actix_files as fs;
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
@@ -56,20 +58,20 @@ struct AppState {
     enclave: SgxEnclave
 }
 
-#[get("/")]
+#[get("/hello")]
 async fn hello() -> impl Responder {
     // for health check
     HttpResponse::Ok().body("Hello world!")
 }
 
-#[get("/exchange_key/{user_pub_key}")]
+#[post("/exchange_key")]
 async fn app_exchange_key(
-    path: web::Path<(String,)>,
+    req_body: String,
     endex: web::Data<AppState>
 ) -> String {
     let e = &endex.enclave;
-    println!("enclave id {}, user pub key {}.", e.geteid(), path.into_inner().0);
-    String::from("SgxPubKey123")
+    println!("enclave id {}, user pub key {}.", e.geteid(), req_body);
+    String::from("3082020a0282020100b7cccbf50ce04a3ba1faf4a58e078224a28c53c4901875aa62012d796261713852add6a839c6572829585048b91c5a632faa74ade49e567f0b9434a705e8d461971a18855834b7a1e7d5ce9e8db58294e9e55c1b3e5d289a14d63a3ee35d9a018b983d4b59617d05505222d2d94752e701d0a421ce4e7a287dd820381d57006d316e9ce10f6a89c2b2fff1ed82ebc3911119d93d3fd0248bc1b3d07fa8c3595b085426418633c36a59bce1346ef77584f04683bd9dff21a6e3fac93e04ce93d704be2aaf401fd410dfbbd15f8cee451dc97bee3bdda85d6ab12bc672791588b801f0d9fcc8780e76ca55c04cf546cbb607cb9b6a6b2dafed3a1502464f709ff48f6e31392e55ba7ee808dc663ed5ec7a91f90884c2554aeb6a44a5e6d36f7dcbcfcc5b74cf5679520ee0097929b1be6fb2cab6e12bf74b259335f7105b31511fa544c2006e7fa0409f6dad392bd4b51e07dbd5be3542f85c1bed274f001f253ffa953db45cac4b4e8949874aab68b6a2039bfad761e2b63fdbf4155916c82a55c673a147499eb905b1ec6282dc4bf9db31d8b44c396c3229f53100edc3ee6662e891e00008d287f10ba15ed78187561423bb496129e22859c551903a85666436dc9f48b82d373b549c7eb86367809c0386c6bc837e0f83c315fb7f43c88a02debd56b40a30a2139332f345c7458baf8505daea855e494e2aa2fa44a5bc57e9090203010001")
 }
 
 #[post("/seal")]
@@ -86,6 +88,11 @@ async fn main() -> std::io::Result<()> {
     let edata: web::Data<AppState> = web::Data::new(AppState{
         enclave: init_enclave()
     });
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder
+        .set_private_key_file("certs/MyKey.key", SslFiletype::PEM)
+        .unwrap();
+    builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
     HttpServer::new(move || {
         App::new()
@@ -93,8 +100,9 @@ async fn main() -> std::io::Result<()> {
             .service(app_exchange_key)
             .service(seal)
             .service(hello)
+            .service(fs::Files::new("/", "./public"))
     })
-    .bind("0.0.0.0:12345")?
+    .bind_openssl("0.0.0.0:30001", builder)?
     .run()
     .await
 }

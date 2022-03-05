@@ -12,3 +12,4 @@ enclave/Enclave_t.o
 enclave/enclave.so
 enclave/target/
 lib/libenclave.a
+public/
