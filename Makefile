@@ -21,7 +21,7 @@ SGX_SDK ?= /opt/sgxsdk
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
 
-TOP_DIR := /home/jiangyan/workspace/incubator-teaclave-sgx-sdk/
+TOP_DIR := /home/livermore/workspace/linux-sgx/incubator-teaclave-sgx-sdk/
 include $(TOP_DIR)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)
