@@ -13,7 +13,7 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as fs;
 
-static ENCLAVE_FILE: &'static str = "enclave.signed.so";
+static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
 extern {
     fn exchange_key(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
