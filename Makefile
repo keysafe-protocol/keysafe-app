@@ -108,7 +108,8 @@ RustEnclave_Name := Enclave_KS/libenclave_ks.so
 Signed_RustEnclave_Name := bin/libenclave_ks.signed.so
 
 .PHONY: all
-all: $(App_Name) $(Signed_RustEnclave_Name)
+#all: $(App_Name) $(Signed_RustEnclave_Name)
+all: $(App_Name)
 
 ######## EDL Objects ########
 
@@ -139,9 +140,9 @@ $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
 # 	@$(CXX) Enclave_KS/Enclave_KS_t.o -o $@ $(RustEnclave_Link_Flags)
 # 	@echo "LINK =>  $@"
 
-$(Signed_RustEnclave_Name): $(RustEnclave_Name)
-	mkdir -p bin
-	cp Enclave_KS/libenclave_ks.signed.so bin/
+#$(Signed_RustEnclave_Name): $(RustEnclave_Name)
+	#mkdir -p bin
+	#cp Enclave_KS/libenclave_ks.signed.so bin/
 
 # .PHONY: enclave
 # enclave:
