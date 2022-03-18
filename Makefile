@@ -17,12 +17,12 @@
 
 ######## SGX SDK Settings ########
 
-SGX_SDK := /home/livermore/workspace/linux-sgx/
+SGX_SDK := /home/jiangyan/workspace/linux-sgx/
 SGX_MODE := SW
 SGX_ARCH := x64
 SGX_DEBUG := 1
 
-TOP_DIR := /home/livermore/workspace/linux-sgx/incubator-teaclave-sgx-sdk/
+TOP_DIR := /home/jiangyan/workspace/incubator-teaclave-sgx-sdk/
 include $(TOP_DIR)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)
