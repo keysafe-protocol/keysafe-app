@@ -17,7 +17,7 @@
 
 ######## SGX SDK Settings ########
 
-SGX_SDK ?= /opt/sgxsdk
+SGX_SDK ?= /home/livermore/workspace/linux-sgx
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
 
