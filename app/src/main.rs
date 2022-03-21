@@ -19,6 +19,7 @@ use lettre::{Message, SmtpTransport, Transport};
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
+
 extern {
 
     fn ec_gen_key(
@@ -40,6 +41,7 @@ extern {
     ) -> sgx_status_t;
 
 }
+
 
 fn init_enclave() -> SgxEnclave {
     let mut launch_token: sgx_launch_token_t = [0; 1024];
@@ -69,7 +71,7 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     let mut retval = sgx_status_t::SGX_SUCCESS;
 
     let result = unsafe {
-        ec_gen_key(enclave.geteid(), &mut retval);
+        ec_gen_key(enclave.geteid(), &mut retval)
     };
     return enclave;
 }

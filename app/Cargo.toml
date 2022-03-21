@@ -26,3 +26,6 @@ serde_urlencoded = "0.7"
 sgx_types = { path = "../../../sgx_types" }
 sgx_urts = { path = "../../../sgx_urts" }
 
+[profile.release]
+debug = true
+
