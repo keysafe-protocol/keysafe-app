@@ -4,6 +4,7 @@ extern crate openssl;
 
 use std::sync::Mutex;
 use std::fs::File;
+use std::fs;
 use sgx_types::*;
 use std::io::Write;
 use sgx_urts::SgxEnclave;
@@ -11,7 +12,10 @@ use sgx_urts::SgxEnclave;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use actix_files as fs;
+use actix_files as afs;
+
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
@@ -50,13 +54,55 @@ struct AppState {
 #[derive(Deserialize)]
 struct SealReq {
     pubkey: String,
-    cond: String,
+    h: String,
     secret: String,
 }
 
-async fn app_seal(e: &SgxEnclave, sealReq: &SealReq) {
-    println!("{}", &sealReq.cond);
-    let mut file = File::create(&sealReq.cond);
+#[derive(Deserialize)]
+struct NotifyReq {
+    pubkey: String,
+    t: String,
+    cond: String
+}
+
+#[derive(Deserialize)]
+struct ProveReq {
+    pubkey: String,
+    t: String,
+    cond: String,
+    code: String,
+    h: String
+}
+
+fn sendmail(account: &str, msg: &str) {
+    let email = Message::builder()
+        .from("KS Admin <@qq.com>".parse().unwrap())
+        .reply_to("KS Admin <@qq.com>".parse().unwrap())
+        .to(format!("KS User<{}>", account).parse().unwrap())
+        .subject("Confirmation Code")
+        .body(String::from(msg))
+        .unwrap();
+    println!("sending mail {} to {}", msg, account);
+    let creds = Credentials::new("@qq.com".to_string(), "".to_string());
+    let mailer = SmtpTransport::relay("smtp.qq.com")
+        .unwrap()
+        .credentials(creds)
+        .build();
+
+    // Send the email
+    match mailer.send(&email) {
+        Ok(_) => println!("Email sent successfully!"),
+        Err(e) => panic!("Could not send email: {:?}", e),
+    }
+}
+
+fn sendmsg(mobile: &str, msg: &str) {
+    println!("sending msg {} to {}", msg, mobile);
+}
+
+async fn save_seal(e: &SgxEnclave, sealReq: &SealReq) {
+    println!("{}", &sealReq.h);
+    let mut file = File::create(&sealReq.h);
     match file {
         Ok(f) => { 
             write!(&f, "{}", sealReq.secret); 
@@ -65,6 +111,13 @@ async fn app_seal(e: &SgxEnclave, sealReq: &SealReq) {
         Err(e) => println!("{}", e)
     } 
 }
+
+fn get_unseal(e: &SgxEnclave, filename: &String) -> String {
+    let content = fs::read_to_string(filename)
+        .expect("Something went wrong reading the file");
+    return content;
+}
+
 
 #[get("/hello")]
 async fn hello() -> impl Responder {
@@ -97,11 +150,40 @@ async fn seal(
     sealReq: web::Json<SealReq>,
     endex: web::Data<AppState>
 ) -> impl Responder {
-    println!("{}", &sealReq.cond);
+    println!("{}", &sealReq.h);
     let e = &endex.enclave;
     // call enclave returns a string
-    app_seal(e, &sealReq).await;
+    save_seal(e, &sealReq).await;
     HttpResponse::Ok().body("successful.")
+}
+
+#[post("/notify")]
+async fn notify_user(
+    notifyReq: web::Json<NotifyReq>,
+    endex: web::Data<AppState>
+) -> impl Responder {
+    println!("notifying {}", &notifyReq.cond);
+    let e = &endex.enclave;
+    if notifyReq.t.eq("email") {
+        // get confirm code from enclave
+        sendmail(&notifyReq.cond, "123456");
+    } else if notifyReq.t.eq("mobile") {
+        // get confirm code from enclave
+        sendmsg(&notifyReq.cond, "123456");
+    }
+    HttpResponse::Ok().body("confirm code sent")
+}
+
+#[post("/prove")]
+async fn prove_user(
+    proveReq: web::Json<ProveReq>,
+    endex: web::Data<AppState>
+) -> impl Responder {
+    println!("proving {}", &proveReq.cond);
+    let e = &endex.enclave;
+    //generate a secret confirm code
+    //send mail to notifyReq.mail
+    HttpResponse::Ok().body("")
 }
 
 #[actix_web::main]
@@ -120,8 +202,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::clone(&edata))
             .service(app_exchange_key)
             .service(seal)
+            .service(notify_user)
+            .service(prove_user)
             .service(hello)
-            .service(fs::Files::new("/", "./public"))
+            .service(afs::Files::new("/", "./public"))
     })
     .bind_openssl("0.0.0.0:30001", builder)?
     .run()

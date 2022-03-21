@@ -17,12 +17,11 @@
 
 ######## SGX SDK Settings ########
 
-SGX_SDK := /home/jiangyan/workspace/linux-sgx/
-SGX_MODE := SW
-SGX_ARCH := x64
-SGX_DEBUG := 1
+SGX_SDK ?= /home/livermore/workspace/linux-sgx
+SGX_MODE ?= HW
+SGX_ARCH ?= x64
 
-TOP_DIR := /home/jiangyan/workspace/incubator-teaclave-sgx-sdk/
+TOP_DIR := /home/livermore/workspace/linux-sgx/incubator-teaclave-sgx-sdk/
 include $(TOP_DIR)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)
@@ -66,7 +65,7 @@ CUSTOM_COMMON_PATH := $(TOP_DIR)/common
 
 ######## EDL Settings ########
 
-Enclave_EDL_Files := Enclave_KS/Enclave_KS_t.c Enclave_KS/Enclave_KS_t.h app/Enclave_KS_u.c app/Enclave_KS_u.h
+Enclave_EDL_Files := enclave/Enclave_t.c enclave/Enclave_t.h app/Enclave_u.c app/Enclave_u.h
 
 ######## APP Settings ########
 
@@ -92,7 +91,7 @@ Crypto_Library_Name := sgx_tcrypto
 KeyExchange_Library_Name := sgx_tkey_exchange
 ProtectedFs_Library_Name := sgx_tprotected_fs
 
-RustEnclave_C_Files := $(wildcard ./Enclave_KS/*.c)
+RustEnclave_C_Files := $(wildcard ./enclave/*.c)
 RustEnclave_C_Objects := $(RustEnclave_C_Files:.c=.o)
 RustEnclave_Include_Paths := -I$(CUSTOM_COMMON_PATH)/inc -I$(CUSTOM_EDL_PATH) -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport -I$(SGX_SDK)/include/epid -I ./enclave -I./include
 
@@ -101,31 +100,29 @@ RustEnclave_Compile_Flags := $(SGX_COMMON_CFLAGS) $(ENCLAVE_CFLAGS) $(RustEnclav
 RustEnclave_Link_Flags := -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfiles -L$(SGX_LIBRARY_PATH) \
 	-Wl,--whole-archive -l$(Trts_Library_Name) -Wl,--no-whole-archive \
 	-Wl,--start-group -lsgx_tstdc -l$(Service_Library_Name) -l$(Crypto_Library_Name) $(RustEnclave_Link_Libs) -Wl,--end-group \
-	-Wl,--version-script=Enclave_KS/Enclave_KS.lds \
+	-Wl,--version-script=enclave/Enclave.lds \
 	$(ENCLAVE_LDFLAGS)
 
-RustEnclave_Name := Enclave_KS/libenclave_ks.so
+RustEnclave_Name := enclave/enclave.so
 Signed_RustEnclave_Name := bin/libenclave_ks.signed.so
 
 .PHONY: all
-#all: $(App_Name) $(Signed_RustEnclave_Name)
-all: $(App_Name)
+all: $(App_Name) $(Signed_RustEnclave_Name)
 
 ######## EDL Objects ########
 
-$(Enclave_EDL_Files): $(SGX_EDGER8R) Enclave_KS/Enclave_KS.edl
-	cp APP_KS/Enclave_KS_u.c app/
-	cp APP_KS/Enclave_KS_u.h app/
-	# @echo "GEN  =>  $(Enclave_EDL_Files)"
+$(Enclave_EDL_Files): $(SGX_EDGER8R) enclave/Enclave.edl
+	$(SGX_EDGER8R) --trusted enclave/Enclave.edl --search-path $(SGX_SDK)/include --search-path $(CUSTOM_EDL_PATH) --trusted-dir enclave
+	$(SGX_EDGER8R) --untrusted enclave/Enclave.edl --search-path $(SGX_SDK)/include --search-path $(CUSTOM_EDL_PATH) --untrusted-dir app
+	@echo "GEN  =>  $(Enclave_EDL_Files)"
 
 ######## App Objects ########
 
-app/Enclave_KS_u.o: APP_KS/Enclave_KS_u.o
-	cp APP_KS/Enclave_KS_u.o app/Enclave_KS_u.o
+app/Enclave_u.o: $(Enclave_EDL_Files)
+	@$(CC) $(App_C_Flags) -c app/Enclave_u.c -o $@
+	@echo "CC   <=  $<"
 
-
-# 生成 enclave 的静态链接库.a，需要库.o
-$(App_Enclave_u_Object): app/Enclave_KS_u.o
+$(App_Enclave_u_Object): app/Enclave_u.o
 	$(AR) rcsD $@ $^
 
 $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
@@ -136,21 +133,26 @@ $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
 
 ######## Enclave Objects ########
 
-# $(RustEnclave_Name): Enclave_KS/Enclave_KS_t.o
-# 	@$(CXX) Enclave_KS/Enclave_KS_t.o -o $@ $(RustEnclave_Link_Flags)
-# 	@echo "LINK =>  $@"
+enclave/Enclave_t.o: $(Enclave_EDL_Files)
+	@$(CC) $(RustEnclave_Compile_Flags) -c enclave/Enclave_t.c -o $@
+	@echo "CC   <=  $<"
 
-#$(Signed_RustEnclave_Name): $(RustEnclave_Name)
-	#mkdir -p bin
-	#cp Enclave_KS/libenclave_ks.signed.so bin/
+$(RustEnclave_Name): enclave enclave/Enclave_t.o
+	@$(CXX) enclave/Enclave_t.o -o $@ $(RustEnclave_Link_Flags)
+	@echo "LINK =>  $@"
 
-# .PHONY: enclave
-# enclave:
-# 	$(MAKE) -C ./enclave/
+$(Signed_RustEnclave_Name): $(RustEnclave_Name)
+	mkdir -p bin
+	@$(SGX_ENCLAVE_SIGNER) sign -key enclave/Enclave_private.pem -enclave $(RustEnclave_Name) -out $@ -config enclave/Enclave.config.xml
+	@echo "SIGN =>  $@"
+
+.PHONY: enclave
+enclave:
+	$(MAKE) -C ./enclave/
 
 
 .PHONY: clean
 clean:
-	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/libenclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
+	@rm -f $(App_Name) $(RustEnclave_Name) $(Signed_RustEnclave_Name) enclave/*_t.* app/*_u.* lib/*.a
 	@cd enclave && cargo clean && rm -f Cargo.lock
 	@cd app && cargo clean && rm -f Cargo.lock
