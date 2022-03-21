@@ -20,8 +20,25 @@ use lettre::{Message, SmtpTransport, Transport};
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
 extern {
-    fn exchange_key(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
-                     some_string: *const u8, len: usize) -> sgx_status_t;
+
+    fn ec_gen_key(
+        eid: sgx_enclave_id_t, 
+        retval: *mut sgx_status_t
+    ) -> sgx_status_t;
+
+    fn ec_ks_exchange(
+        eid: sgx_enclave_id_t, 
+        retval: *mut sgx_status_t,
+        strval: *mut char
+    ) -> sgx_status_t;
+
+    fn ec_ks_seal(
+        eid: sgx_enclave_id_t, 
+        retval: *mut sgx_status_t,
+        some_string: *const char,
+        strval: *mut char
+    ) -> sgx_status_t;
+
 }
 
 fn init_enclave() -> SgxEnclave {
@@ -45,6 +62,16 @@ fn init_enclave() -> SgxEnclave {
             panic!("[-] Init Enclave Failed {}!", x.as_str());
         },
     };
+}
+
+fn init_enclave_and_genkey() -> SgxEnclave {
+    let enclave = init_enclave();
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+
+    let result = unsafe {
+        ec_gen_key(enclave.geteid(), &mut retval);
+    };
+    return enclave;
 }
 
 struct AppState {
@@ -189,7 +216,7 @@ async fn prove_user(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let edata: web::Data<AppState> = web::Data::new(AppState{
-        enclave: init_enclave()
+        enclave: init_enclave_and_genkey()
     });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
