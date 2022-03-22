@@ -25,8 +25,9 @@ SGXSSL_TRUSTED_LIB_PATH ?= /opt/intel/sgxssl/lib64
 SGX_MODE := HW
 SGX_ARCH := x64
 SGX_DEBUG := 1
+KS_SGX_SRC := /home/jiangyan/workspace/ks-sgx
+TOP_DIR := /home/jiangyan/workspace/incubator-teaclave-sgx-sdk/
 
-TOP_DIR := /home/xiaolei/workspace/incubator-teaclave-sgx-sdk/
 include $(TOP_DIR)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)
@@ -70,7 +71,7 @@ CUSTOM_COMMON_PATH := $(TOP_DIR)/common
 
 ######## EDL Settings ########
 
-Enclave_EDL_Files := Enclave_KS/Enclave_KS_t.c Enclave_KS/Enclave_KS_t.h app/Enclave_KS_u.c app/Enclave_KS_u.h
+Enclave_EDL_Files := $(KS_SGX_SRC)/Enclave_KS/Enclave_KS_t.c $(KS_SGX_SRC)/Enclave_KS/Enclave_KS_t.h app/Enclave_KS_u.c app/Enclave_KS_u.h
 
 ######## APP Settings ########
 
@@ -96,7 +97,7 @@ Crypto_Library_Name := sgx_tcrypto
 KeyExchange_Library_Name := sgx_tkey_exchange
 ProtectedFs_Library_Name := sgx_tprotected_fs
 
-RustEnclave_C_Files := $(wildcard ./Enclave_KS/*.c)
+RustEnclave_C_Files := $(wildcard $(KS_SGX_SRC)/Enclave_KS/*.c)
 RustEnclave_C_Objects := $(RustEnclave_C_Files:.c=.o)
 RustEnclave_Include_Paths := -I$(CUSTOM_COMMON_PATH)/inc -I$(CUSTOM_EDL_PATH) -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport -I$(SGX_SDK)/include/epid -I ./enclave -I./include -I$(SGXSSL_INCLUDE_PATH)
 
@@ -108,23 +109,23 @@ RustEnclave_Link_Flags := -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfi
 	-Wl,--version-script=Enclave_KS/Enclave_KS.lds \
 	$(ENCLAVE_LDFLAGS)
 
-RustEnclave_Name := Enclave_KS/libenclave_ks.so
-Signed_RustEnclave_Name := libenclave_ks.signed.so
+RustEnclave_Name := $(KS_SGX_SRC)/libenclave_ks.so
+Signed_RustEnclave_Name := bin/libenclave_ks.signed.so
 
 .PHONY: all
 all: $(App_Name) $(Signed_RustEnclave_Name)
 
 ######## EDL Objects ########
 
-$(Enclave_EDL_Files): $(SGX_EDGER8R) Enclave_KS/Enclave_KS.edl
-	cp APP_KS/Enclave_KS_u.c app/
-	cp APP_KS/Enclave_KS_u.h app/
+$(Enclave_EDL_Files): $(SGX_EDGER8R) $(KS_SGX_SRC)/Enclave_KS/Enclave_KS.edl
+	cp $(KS_SGX_SRC)/App/Enclave_KS_u.c app/
+	cp $(KS_SGX_SRC)/APP/Enclave_KS_u.h app/
 	# @echo "GEN  =>  $(Enclave_EDL_Files)"
 
 ######## App Objects ########
 
-app/Enclave_KS_u.o: APP_KS/Enclave_KS_u.o
-	cp APP_KS/Enclave_KS_u.o app/Enclave_KS_u.o
+app/Enclave_KS_u.o: $(KS_SGX_SRC)/App/Enclave_KS_u.o
+	cp $(KS_SGX_SRC)/App/Enclave_KS_u.o app/Enclave_KS_u.o
 
 
 # 生成 enclave 的静态链接库.a，需要库.o
@@ -143,9 +144,9 @@ $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
 # 	@$(CXX) Enclave_KS/Enclave_KS_t.o -o $@ $(RustEnclave_Link_Flags)
 # 	@echo "LINK =>  $@"
 
-$(Signed_RustEnclave_Name): $(RustEnclave_Name)
+$(Signed_RustEnclave_Name): $(KS_SGX_SRC)/libenclave_ks.signed.so
 	mkdir -p bin
-	cp libenclave_ks.signed.so bin/
+	cp $(KS_SGX_SRC)/libenclave_ks.signed.so bin/
 
 # .PHONY: enclave
 # enclave:
