@@ -8,6 +8,8 @@ use std::fs;
 use sgx_types::*;
 use std::io::Write;
 use sgx_urts::SgxEnclave;
+use std::str;
+use std::ffi::CString;
 
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
@@ -30,14 +32,29 @@ extern {
     fn ec_ks_exchange(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
-        strval: *mut char
+        strval: *mut c_void
     ) -> sgx_status_t;
 
     fn ec_ks_seal(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
-        some_string: *const char,
-        strval: *mut char
+        some_string: *const c_char,
+        strval: *mut c_void
+    ) -> sgx_status_t;
+
+    fn ec_ks_unseal(
+        eid: sgx_enclave_id_t, 
+        retval: *mut sgx_status_t,
+        user_pub_key: *const c_char,
+        sealed: *const c_char,
+        code: *const u8
+    ) -> sgx_status_t;
+
+    fn ec_prove_me(
+        eid: sgx_enclave_id_t, 
+        retval: *mut sgx_status_t,
+        code: *const u8,
+        unsealed: *mut c_void
     ) -> sgx_status_t;
 
 }
@@ -73,6 +90,10 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     let result = unsafe {
         ec_gen_key(enclave.geteid(), &mut retval)
     };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {},
+        _ => panic!("Enclave generate key-pair failed!")
+    }
     return enclave;
 }
 
@@ -129,12 +150,16 @@ fn sendmsg(mobile: &str, msg: &str) {
     println!("sending msg {} to {}", msg, mobile);
 }
 
-async fn save_seal(e: &SgxEnclave, sealReq: &SealReq) {
+async fn save_file(sealReq: &SealReq, val: Vec<u8>) {
     println!("{}", &sealReq.h);
-    let mut file = File::create(&sealReq.h);
+    let file = File::create(&sealReq.h);
     match file {
         Ok(f) => { 
-            write!(&f, "{}", sealReq.secret); 
+            let s = match str::from_utf8(&val[0..1024]) {
+                Ok(v) => v,
+                Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+            };
+            write!(&f, "{}", s); 
             println!("successfully written to file");
         },
         Err(e) => println!("{}", e)
@@ -155,23 +180,24 @@ async fn hello() -> impl Responder {
 }
 
 #[post("/exchange_key")]
-async fn app_exchange_key(
+async fn exchange_key(
     req_body: String,
     endex: web::Data<AppState>
-) -> String {
+) -> impl Responder {
     let e = &endex.enclave;
-    println!("enclave id {}, user pub key {}.", e.geteid(), req_body);
-    String::from(" -----BEGIN RSA PUBLIC KEY-----
-    MIIBhAKCAXsFp4OlxJzMM4Q5pbV+rz4lNK1EhEuW+nfkuqePOR6MY3Ujaqfy3ny2
-    HJR9WoPYGKqsWseAvD8U0/vbnejMk05bQgd3eg8nq4ZY1jupkrBaVnliJt2vCZXa
-    2a7gq8r+3l2I5GCAKR61vtm/rmaI0clyaShWSAVTWbG0W6kZCwJL67Jw+B6eBYtY
-    LRojUwUMBS5YmTGLGgOrLINMev7rOng9hJWmVK98WgMdpbu7SDfgYU3Zsq1AbA5F
-    zb4H/8A3pZv7uLNYtsL9aS6nx14OoHmMcu54gnFYKQ+XldCYqS72gCJf/vnAh/QQ
-    q6fdFu9XF97ITDjJNAe4+SSAqV6H6DT1RzdbkUytpFpvtmA76fJOydOBwHXqAm+Q
-    xC1NwqTeiOXQHFIQvSqKe1yM6RhjaQf7wSIFOkfivbpxS4X4/VPF+gxXfTW0bfBf
-    a15IsV3vsBzu3kEKgsvWYRhTrX5byacxEP77iin2P6clLbo4GbWFERF93xuO0Q4l
-    vEaNAgMBAAE=
-    -----END RSA PUBLIC KEY-----")
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut plaintext = vec![0; 1024];
+    let result = unsafe {
+        ec_ks_exchange(e.geteid(), &mut retval, 
+            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => { 
+            plaintext.resize(1024, 0);
+            HttpResponse::Ok().body(plaintext)
+        },
+        _ => panic!("Exchange key failed!")
+    }
 }
 
 #[post("/seal")]
@@ -180,10 +206,23 @@ async fn seal(
     endex: web::Data<AppState>
 ) -> impl Responder {
     println!("{}", &sealReq.h);
+    println!("{:?}", sealReq.secret);
     let e = &endex.enclave;
-    // call enclave returns a string
-    save_seal(e, &sealReq).await;
-    HttpResponse::Ok().body("successful.")
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut plaintext = vec![0; 1024];
+    let result = unsafe {
+        ec_ks_seal(e.geteid(), &mut retval,
+            sealReq.secret.as_ptr() as *const c_char,
+            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            plaintext.resize(1024, 0);
+            save_file(&sealReq, plaintext);
+            HttpResponse::Ok().body("Seal Completed.")
+        },
+        _ => panic!("Seal failed!")
+    }
 }
 
 #[post("/notify")]
@@ -229,14 +268,14 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::clone(&edata))
-            .service(app_exchange_key)
+            .service(exchange_key)
             .service(seal)
             .service(notify_user)
             .service(prove_user)
             .service(hello)
             .service(afs::Files::new("/", "./public"))
     })
-    .bind_openssl("0.0.0.0:30001", builder)?
+    .bind_openssl("0.0.0.0:30000", builder)?
     .run()
     .await
 }
