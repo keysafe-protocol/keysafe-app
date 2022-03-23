@@ -133,7 +133,7 @@ $(App_Enclave_u_Object): app/Enclave_KS_u.o
 	$(AR) rcsD $@ $^
 
 $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
-	@cd app && SGX_SDK=$(SGX_SDK) cargo --offline build $(App_Rust_Flags)
+	@cd app && SGX_SDK=$(SGX_SDK) cargo build $(App_Rust_Flags)
 	@echo "Cargo  =>  $@"
 	mkdir -p bin
 	cp $(App_Rust_Path)/app ./bin
@@ -156,4 +156,4 @@ $(Signed_RustEnclave_Name): $(KS_SGX_SRC)/libenclave_ks.signed.so
 .PHONY: clean
 clean:
 	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/libenclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
-	# @cd app && cargo clean && rm -f Cargo.lock
+	@cd app && cargo clean && rm -f Cargo.lock
