@@ -223,6 +223,7 @@ async fn seal(
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext = vec![0; 1024];
     let buffer = hex::decode(&sealReq.secret).expect("Decode Failed.");
+    println!("{:?}", buffer);
     let result = unsafe {
         ec_ks_seal(e.geteid(), &mut retval,
             buffer.as_ptr() as *const c_char,
