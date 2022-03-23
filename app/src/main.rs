@@ -32,6 +32,7 @@ extern {
     fn ec_ks_exchange(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
+        user_pub_key: *const c_char,
         strval: *mut c_void
     ) -> sgx_status_t;
 
@@ -189,6 +190,7 @@ async fn exchange_key(
     let mut plaintext = vec![0; 1024];
     let result = unsafe {
         ec_ks_exchange(e.geteid(), &mut retval, 
+            req_body.as_ptr() as *const c_char,
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
     };
     match result {
