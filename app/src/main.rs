@@ -18,6 +18,8 @@ use actix_files as afs;
 
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
+use hex;
+
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
@@ -57,6 +59,7 @@ extern {
         code: *const u8,
         unsealed: *mut c_void
     ) -> sgx_status_t;
+
 
 }
 
@@ -197,7 +200,7 @@ async fn exchange_key(
     println!("user pub key is {}", exKeyReq.pubkey);
     let result = unsafe {
         ec_ks_exchange(e.geteid(), &mut retval, 
-            exKeyReq.as_ptr() as *const c_char,
+            exKeyReq.pubkey.as_ptr() as *const c_char,
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
     };
     match result {
@@ -215,13 +218,14 @@ async fn seal(
     endex: web::Data<AppState>
 ) -> impl Responder {
     println!("{}", &sealReq.h);
-    println!("{:?}", sealReq.secret);
+    println!("{}", &sealReq.secret);
     let e = &endex.enclave;
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext = vec![0; 1024];
+    let buffer = hex::decode(&sealReq.secret).expect("Decode Failed.");
     let result = unsafe {
         ec_ks_seal(e.geteid(), &mut retval,
-            sealReq.secret.as_ptr() as *const c_char,
+            buffer.as_ptr() as *const c_char,
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
     };
     match result {
