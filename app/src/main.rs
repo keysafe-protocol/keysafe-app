@@ -188,6 +188,7 @@ async fn exchange_key(
     let e = &endex.enclave;
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext = vec![0; 1024];
+    println!("user pub key is {}", req_body);
     let result = unsafe {
         ec_ks_exchange(e.geteid(), &mut retval, 
             req_body.as_ptr() as *const c_char,
