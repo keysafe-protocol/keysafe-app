@@ -110,6 +110,12 @@ struct SealReq {
 }
 
 #[derive(Deserialize)]
+struct ExKeyReq {
+    pubkey: String
+}
+
+
+#[derive(Deserialize)]
 struct NotifyReq {
     pubkey: String,
     t: String,
@@ -182,16 +188,16 @@ async fn hello() -> impl Responder {
 
 #[post("/exchange_key")]
 async fn exchange_key(
-    req_body: String,
+    exKeyReq: web::Json<ExKeyReq>,
     endex: web::Data<AppState>
 ) -> impl Responder {
     let e = &endex.enclave;
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext = vec![0; 1024];
-    println!("user pub key is {}", req_body);
+    println!("user pub key is {}", exKeyReq.pubkey);
     let result = unsafe {
         ec_ks_exchange(e.geteid(), &mut retval, 
-            req_body.as_ptr() as *const c_char,
+            exKeyReq.as_ptr() as *const c_char,
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
     };
     match result {
