@@ -43,8 +43,11 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
         some_string: *const c_char,
+        len1: u32,
         text: *const c_char,
-        strval: *mut c_void
+        len2: u32,
+        strval: *mut c_void,
+        len3: u32
     ) -> sgx_status_t;
 
     fn ec_ks_unseal(
@@ -62,9 +65,13 @@ extern {
         unsealed: *mut c_void
     ) -> sgx_status_t;
 
+    fn ec_calc_sealed_size(
+        eid: sgx_enclave_id_t, 
+        retval: *mut u32,
+        len1: u32
+    ) -> sgx_status_t;
 
 }
-
 
 fn init_enclave() -> SgxEnclave {
     let mut launch_token: sgx_launch_token_t = [0; 1024];
@@ -119,7 +126,6 @@ struct SealReq {
 struct ExKeyReq {
     pubkey: String
 }
-
 
 #[derive(Deserialize)]
 struct NotifyReq {
@@ -179,12 +185,11 @@ async fn save_file(sealReq: &SealReq, val: Vec<u8>) {
     } 
 }
 
-fn get_unseal(e: &SgxEnclave, filename: &String) -> String {
+fn get_sealed(e: &SgxEnclave, filename: &String) -> String {
     let content = fs::read_to_string(filename)
         .expect("Something went wrong reading the file");
     return content;
 }
-
 
 #[get("/hello")]
 async fn hello() -> impl Responder {
@@ -232,11 +237,27 @@ async fn seal(
     let mut plaintext = vec![0; 1024];
     let buffer = hex::decode(&sealReq.secret).expect("Decode Failed.");
     println!("{:?}", buffer);
+
+    let mut len1 :u32 = 0;
+    let result1 = unsafe {
+        ec_calc_sealed_size(e.geteid(), 
+        &mut len1, 
+        buffer.len());
+    }
+    match result {
+        sgx_status_t::SUCCESS => {
+        },
+        _ => panic!("calc size failed.")
+    }
+
+    let mut retval = sgx_status_t::SGX_SUCCESS;
     let result = unsafe {
         ec_ks_seal(e.geteid(), &mut retval,
-            buffer.as_ptr() as *const c_char,
-            sealReq.text.as_ptr() as *const c_char,
-            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
+            buffer.as_ptr() as *const c_char, buffer.len(),
+            sealReq.text.as_ptr() as *const c_char, sealReq.text.len(),
+            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
+            len1
+        )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
@@ -255,6 +276,7 @@ async fn notify_user(
 ) -> impl Responder {
     println!("notifying {}", &notifyReq.cond);
     let e = &endex.enclave;
+    let content = get_sealed(notifyReq.)
     if notifyReq.t.eq("email") {
         // get confirm code from enclave
         sendmail(&notifyReq.cond, "123456");
@@ -272,6 +294,9 @@ async fn prove_user(
 ) -> impl Responder {
     println!("proving {}", &proveReq.cond);
     let e = &endex.enclave;
+    if(proveReq.t.eq("password")) {
+        read_to_string
+    }
     //generate a secret confirm code
     //send mail to notifyReq.mail
     HttpResponse::Ok().body("123")
