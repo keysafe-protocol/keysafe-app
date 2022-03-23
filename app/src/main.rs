@@ -43,6 +43,7 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
         some_string: *const c_char,
+        text: *const c_char,
         strval: *mut c_void
     ) -> sgx_status_t;
 
@@ -111,6 +112,7 @@ struct SealReq {
     pubkey: String,
     h: String,
     secret: String,
+    text: String
 }
 
 #[derive(Deserialize)]
@@ -233,6 +235,7 @@ async fn seal(
     let result = unsafe {
         ec_ks_seal(e.geteid(), &mut retval,
             buffer.as_ptr() as *const c_char,
+            sealReq.text.as_ptr() as *const c_char,
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
     };
     match result {
@@ -271,7 +274,7 @@ async fn prove_user(
     let e = &endex.enclave;
     //generate a secret confirm code
     //send mail to notifyReq.mail
-    HttpResponse::Ok().body("")
+    HttpResponse::Ok().body("123")
 }
 
 #[actix_web::main]
