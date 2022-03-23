@@ -156,5 +156,4 @@ $(Signed_RustEnclave_Name): $(KS_SGX_SRC)/libenclave_ks.signed.so
 .PHONY: clean
 clean:
 	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/libenclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
-	@cd enclave && cargo clean && rm -f Cargo.lock
-	@cd app && cargo clean && rm -f Cargo.lock
+	# @cd app && cargo clean && rm -f Cargo.lock
