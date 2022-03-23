@@ -35,7 +35,8 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
         user_pub_key: *const c_char,
-        strval: *mut c_void
+        strval: *mut c_void,
+        strval2: *mut c_void
     ) -> sgx_status_t;
 
     fn ec_ks_seal(
@@ -197,15 +198,20 @@ async fn exchange_key(
     let e = &endex.enclave;
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext = vec![0; 1024];
+    let mut plaintext2 = vec![0; 1024];
     println!("user pub key is {}", exKeyReq.pubkey);
     let result = unsafe {
         ec_ks_exchange(e.geteid(), &mut retval, 
             exKeyReq.pubkey.as_ptr() as *const c_char,
-            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void)
+            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
+            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
+        )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => { 
             plaintext.resize(1024, 0);
+            println!("sgx pub key {:?}", plaintext);
+            println!("sgx share key {:?}", plaintext2);
             HttpResponse::Ok().body(plaintext)
         },
         _ => panic!("Exchange key failed!")
