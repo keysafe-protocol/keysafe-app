@@ -52,16 +52,16 @@ extern {
 
     fn ec_ks_unseal(
         eid: sgx_enclave_id_t, 
-        retval: *mut sgx_status_t,
+        retval: *mut u32,
         user_pub_key: *const c_char,
         sealed: *const c_char,
-        code: *const u8
+        len3: u32
     ) -> sgx_status_t;
 
     fn ec_prove_me(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
-        code: *const u8,
+        code: u32,
         unsealed: *mut c_void
     ) -> sgx_status_t;
 
@@ -131,7 +131,8 @@ struct ExKeyReq {
 struct NotifyReq {
     pubkey: String,
     t: String,
-    cond: String
+    cond: String,
+    h: String
 }
 
 #[derive(Deserialize)]
@@ -139,11 +140,11 @@ struct ProveReq {
     pubkey: String,
     t: String,
     cond: String,
-    code: String,
-    h: String
+    code: String
 }
 
 fn sendmail(account: &str, msg: &str) {
+    println!("sending mail {} to {}", msg, account);
     let email = Message::builder()
         .from("KS Admin <@qq.com>".parse().unwrap())
         .reply_to("KS Admin <@qq.com>".parse().unwrap())
@@ -151,7 +152,6 @@ fn sendmail(account: &str, msg: &str) {
         .subject("Confirmation Code")
         .body(String::from(msg))
         .unwrap();
-    println!("sending mail {} to {}", msg, account);
     let creds = Credentials::new("@qq.com".to_string(), "".to_string());
     let mailer = SmtpTransport::relay("smtp.qq.com")
         .unwrap()
@@ -169,26 +169,31 @@ fn sendmsg(mobile: &str, msg: &str) {
     println!("sending msg {} to {}", msg, mobile);
 }
 
-async fn save_file(sealReq: &SealReq, val: Vec<u8>) {
-    println!("{}", &sealReq.h);
+fn save_file(sealReq: &SealReq, val: Vec<u8>, n: usize) {
+    println!("saving to file {}", &sealReq.h);
     let file = File::create(&sealReq.h);
     match file {
-        Ok(f) => { 
-            let s = match str::from_utf8(&val[0..1024]) {
+        Ok(mut f) => { 
+            f.write_all(&val[0..n]);
+            /*
+            let s = match str::from_utf8(&val[0..n]) {
                 Ok(v) => v,
                 Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
             };
             write!(&f, "{}", s); 
+            */
             println!("successfully written to file");
         },
         Err(e) => println!("{}", e)
     } 
 }
 
-fn get_sealed(e: &SgxEnclave, filename: &String) -> String {
-    let content = fs::read_to_string(filename)
-        .expect("Something went wrong reading the file");
-    return content;
+fn get_sealed(filename: &String) -> Vec<u8> {
+    let content = fs::read(filename);
+    match content {
+        Ok(x) => x,
+        _ => panic!("read file failed.")
+    }
 }
 
 #[get("/hello")]
@@ -230,39 +235,39 @@ async fn seal(
     sealReq: web::Json<SealReq>,
     endex: web::Data<AppState>
 ) -> impl Responder {
-    println!("{}", &sealReq.h);
-    println!("{}", &sealReq.secret);
     let e = &endex.enclave;
-    let mut retval = sgx_status_t::SGX_SUCCESS;
-    let mut plaintext = vec![0; 1024];
     let buffer = hex::decode(&sealReq.secret).expect("Decode Failed.");
-    println!("{:?}", buffer);
-
     let mut len1 :u32 = 0;
     let result1 = unsafe {
-        ec_calc_sealed_size(e.geteid(), 
-        &mut len1, 
-        buffer.len());
-    }
-    match result {
-        sgx_status_t::SUCCESS => {
+        ec_calc_sealed_size(
+            e.geteid(), &mut len1, u32::try_from(buffer.len()).unwrap())
+    };
+
+    match result1 {
+        sgx_status_t::SGX_SUCCESS => {
         },
         _ => panic!("calc size failed.")
-    }
+    };
 
     let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut plaintext = vec![0; usize::try_from(len1).unwrap()];
     let result = unsafe {
+        println!("{:?}", buffer);
+        println!("{:?}", sealReq.text);
+        println!("len1 {}", u32::try_from(buffer.len()).unwrap());
+        println!("len2 {}", u32::try_from(sealReq.text.len()).unwrap());
+        println!("len3 {}", len1);
         ec_ks_seal(e.geteid(), &mut retval,
-            buffer.as_ptr() as *const c_char, buffer.len(),
-            sealReq.text.as_ptr() as *const c_char, sealReq.text.len(),
+            buffer.as_ptr() as *const c_char, u32::try_from(buffer.len()).unwrap(),
+            sealReq.text.as_ptr() as *const c_char, u32::try_from(sealReq.text.len()).unwrap(),
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
             len1
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
-            plaintext.resize(1024, 0);
-            save_file(&sealReq, plaintext);
+            plaintext.resize(usize::try_from(len1).unwrap(), 0);
+            save_file(&sealReq, plaintext, usize::try_from(len1).unwrap());
             HttpResponse::Ok().body("Seal Completed.")
         },
         _ => panic!("Seal failed!")
@@ -276,15 +281,33 @@ async fn notify_user(
 ) -> impl Responder {
     println!("notifying {}", &notifyReq.cond);
     let e = &endex.enclave;
-    let content = get_sealed(notifyReq.)
-    if notifyReq.t.eq("email") {
-        // get confirm code from enclave
-        sendmail(&notifyReq.cond, "123456");
-    } else if notifyReq.t.eq("mobile") {
-        // get confirm code from enclave
-        sendmsg(&notifyReq.cond, "123456");
+
+    let content = get_sealed(&notifyReq.h);
+    // get confirm code from enclave
+    let mut len1 :u32 = 0;
+    let result = unsafe {
+        ec_ks_unseal(
+            e.geteid(), 
+            &mut len1,
+            notifyReq.pubkey.as_ptr() as *const c_char,
+            content.as_ptr() as * const c_char,
+            1664
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS =>  {
+            if notifyReq.t.eq("email") {
+                sendmail(&notifyReq.cond, &len1.to_string());
+                HttpResponse::Ok().body("confirm code sent")
+            } else if notifyReq.t.eq("mobile") {
+                sendmsg(&notifyReq.cond, &len1.to_string());
+                HttpResponse::Ok().body("confirm code sent")
+            } else {
+                HttpResponse::Ok().body(len1.to_string())
+            }
+        },
+        _ => panic!("calling unseal failed.")
     }
-    HttpResponse::Ok().body("confirm code sent")
 }
 
 #[post("/prove")]
@@ -294,12 +317,23 @@ async fn prove_user(
 ) -> impl Responder {
     println!("proving {}", &proveReq.cond);
     let e = &endex.enclave;
-    if(proveReq.t.eq("password")) {
-        read_to_string
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut plaintext = vec![0; 4096];
+    let result = unsafe {
+        ec_prove_me(
+            e.geteid(),
+            &mut retval,
+            proveReq.code.parse::<u32>().unwrap() ,
+            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            plaintext.resize(4096, 0);
+            HttpResponse::Ok().body(plaintext)
+        },
+        _ => panic!("sgx prove me failed!")
     }
-    //generate a secret confirm code
-    //send mail to notifyReq.mail
-    HttpResponse::Ok().body("123")
 }
 
 #[actix_web::main]
