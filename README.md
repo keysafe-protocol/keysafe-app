@@ -11,12 +11,10 @@
 + clone ks-sgx in another directory,
 + cd ks-sgx; make
 + go back to keysafe-sgx
-+ change Makefile SGX_SDK and TOP_DIR according to your environment
-+ ln -s path-to-ks-sgx/APP ./APP_KS
-+ ln -s path-to-ks-sgx/Enclave_KS ./
-+ cp path-to-ks-sgx/.so files to ./
-+ make clean
-+ make
++ change Makefile MakeHwFile.
++ SGX_SDK and TOP_DIR according to your environment
++ KS_SGX_SRC point to ks-sgx directory.
++ make -f MakeHwFile
 # execute
 + cd bin
 + ln -s ../certs .
