@@ -355,7 +355,7 @@ async fn main() -> std::io::Result<()> {
             .service(notify_user)
             .service(prove_user)
             .service(hello)
-            .service(afs::Files::new("/", "./public"))
+            .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
     .bind_openssl("0.0.0.0:30000", builder)?
     .run()
