@@ -357,7 +357,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
-    .bind_openssl("0.0.0.0:30000", builder)?
+    .bind_openssl("0.0.0.0:443", builder)?
     .run()
     .await
 }
