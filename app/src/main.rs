@@ -10,6 +10,7 @@ use std::io::Write;
 use sgx_urts::SgxEnclave;
 use std::str;
 use std::ffi::CString;
+use std::ffi::CStr;
 
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
@@ -71,6 +72,15 @@ extern {
         len1: u32
     ) -> sgx_status_t;
 
+}
+
+#[no_mangle]
+pub extern "C"
+fn oc_print(some_string: *const c_char) -> sgx_status_t {
+    let c_str: &CStr = unsafe { CStr::from_ptr(some_string)};
+    let str_slice: &str = c_str.to_str().unwrap();
+    println!("{}", str_slice);
+    return sgx_status_t::SGX_SUCCESS;    
 }
 
 fn init_enclave() -> SgxEnclave {
