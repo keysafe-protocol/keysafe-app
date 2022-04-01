@@ -27,6 +27,7 @@ fn main () {
     println!("cargo:rustc-link-search=native=../lib");
     println!("cargo:rustc-link-lib=static=Enclave_u");
     println!("cargo:rustc-link-search=/opt/intel/sgxssl/lib64/");
+    println!("cargo:rustc-link-search=/opt/sgx/sgxsdk/lib64/");
     println!("cargo:rustc-link-lib=static=sgx_usgxssl");
     println!("cargo:rustc-link-search=native={}/lib64", sdk_dir);
     println!("cargo:include=native=/opt/intel/sgxssl/include/");

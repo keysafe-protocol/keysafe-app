@@ -1,10 +1,14 @@
 extern crate sgx_types;
 extern crate sgx_urts;
 extern crate openssl;
+#[macro_use]
+extern crate log;
+extern crate log4rs;
 
 use std::sync::Mutex;
 use std::fs::File;
 use std::fs;
+use std::path::Path;
 use sgx_types::*;
 use std::io::Write;
 use sgx_urts::SgxEnclave;
@@ -21,6 +25,8 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use hex;
 
+use log::{error, info, warn};
+use glob::glob;
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
@@ -77,13 +83,15 @@ extern {
 #[no_mangle]
 pub extern "C"
 fn oc_print(some_string: *const c_char) -> sgx_status_t {
+    // let mut plaintext = vec![0; 1024];
     let c_str: &CStr = unsafe { CStr::from_ptr(some_string)};
-    let str_slice: &str = c_str.to_str().unwrap();
-    println!("{}", str_slice);
+    let plaintext = c_str.to_bytes();
+    println!("{:?}", plaintext);
     return sgx_status_t::SGX_SUCCESS;    
 }
 
 fn init_enclave() -> SgxEnclave {
+    error!("{}", "abc");
     let mut launch_token: sgx_launch_token_t = [0; 1024];
     let mut launch_token_updated: i32 = 0;
     // call sgx_create_enclave to initialize an enclave instance
@@ -179,19 +187,12 @@ fn sendmsg(mobile: &str, msg: &str) {
     println!("sending msg {} to {}", msg, mobile);
 }
 
-fn save_file(sealReq: &SealReq, val: Vec<u8>, n: usize) {
-    println!("saving to file {}", &sealReq.h);
-    let file = File::create(&sealReq.h);
+fn save_file(fname: &str, val: Vec<u8>, n: usize) {
+    println!("saving to file {}", fname);
+    let file = File::create(fname);
     match file {
         Ok(mut f) => { 
             f.write_all(&val[0..n]);
-            /*
-            let s = match str::from_utf8(&val[0..n]) {
-                Ok(v) => v,
-                Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
-            };
-            write!(&f, "{}", s); 
-            */
             println!("successfully written to file");
         },
         Err(e) => println!("{}", e)
@@ -206,10 +207,29 @@ fn get_sealed(filename: &String) -> Vec<u8> {
     }
 }
 
-#[get("/hello")]
+fn check_sealed(filename: &String) -> u32 {
+    let mut pat = String::new();
+    pat.push_str(filename);
+    pat.push_str(".*");
+    for entry in glob(&pat).expect("Failed to find sealed file") {
+        match entry {
+            Ok(path) => {
+                info!("find file {}", filename);
+                return path.extension().unwrap().to_str().unwrap().parse::<u32>().unwrap()
+            },
+            Err(e) => {
+                info!("unable to find file {}", filename);
+                return 0
+            }
+        }
+    }
+    return 0;
+}
+
+#[get("/health")]
 async fn hello() -> impl Responder {
     // for health check
-    HttpResponse::Ok().body("Hello world!")
+    HttpResponse::Ok().body("Webapp is up and running!")
 }
 
 #[post("/exchange_key")]
@@ -277,7 +297,12 @@ async fn seal(
     match result {
         sgx_status_t::SGX_SUCCESS => {
             plaintext.resize(usize::try_from(len1).unwrap(), 0);
-            save_file(&sealReq, plaintext, usize::try_from(len1).unwrap());
+            let mut fname: String = sealReq.h.to_owned();
+            let fsize = len1.to_string();
+            fname.push_str(".");
+            fname.push_str(&fsize);
+            info!("saving file as {}", fname);
+            save_file(&fname, plaintext, usize::try_from(len1).unwrap());
             HttpResponse::Ok().body("Seal Completed.")
         },
         _ => panic!("Seal failed!")
@@ -292,16 +317,27 @@ async fn notify_user(
     println!("notifying {}", &notifyReq.cond);
     let e = &endex.enclave;
 
-    let content = get_sealed(&notifyReq.h);
-    // get confirm code from enclave
+    let len3 = check_sealed(&notifyReq.h);
+    info!("file extension is {}", len3.to_string());
+    if len3 == 0 {
+        return HttpResponse::Ok().body("seal not found");
+    }
+
+    let mut fname: String = notifyReq.h.to_owned();
+    let fsize = len3.to_string();
+    fname.push_str(".");
+    fname.push_str(&fsize);
+    info!("getting file {}", fname);
+    let content = get_sealed(&fname);
     let mut len1 :u32 = 0;
+    // get confirm code from enclave
     let result = unsafe {
         ec_ks_unseal(
             e.geteid(), 
             &mut len1,
             notifyReq.pubkey.as_ptr() as *const c_char,
             content.as_ptr() as * const c_char,
-            1664
+            len3
         )
     };
     match result {
@@ -348,6 +384,8 @@ async fn prove_user(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    log4rs::init_file("log4rs.yml", Default::default()).unwrap();
+    info!("logging!");
     let edata: web::Data<AppState> = web::Data::new(AppState{
         enclave: init_enclave_and_genkey()
     });
@@ -367,7 +405,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
-    .bind_openssl("0.0.0.0:443", builder)?
+    .bind_openssl("0.0.0.0:30000", builder)?
     .run()
     .await
 }
