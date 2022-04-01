@@ -364,7 +364,7 @@ async fn prove_user(
     println!("proving {}", &proveReq.cond);
     let e = &endex.enclave;
     let mut retval = sgx_status_t::SGX_SUCCESS;
-    let mut plaintext = vec![0; 4096];
+    let mut plaintext = vec![0; 8192];
     let result = unsafe {
         ec_prove_me(
             e.geteid(),
@@ -375,7 +375,7 @@ async fn prove_user(
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
-            plaintext.resize(4096, 0);
+            plaintext.resize(8192, 0);
             HttpResponse::Ok().body(plaintext)
         },
         _ => panic!("sgx prove me failed!")
