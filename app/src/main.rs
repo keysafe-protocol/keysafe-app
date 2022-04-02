@@ -164,14 +164,14 @@ struct ProveReq {
 fn sendmail(account: &str, msg: &str) {
     println!("sending mail {} to {}", msg, account);
     let email = Message::builder()
-        .from("KS Admin <@qq.com>".parse().unwrap())
-        .reply_to("KS Admin <@qq.com>".parse().unwrap())
+        .from("Verification Node <verify@keysafe.network>".parse().unwrap())
+        .reply_to("None <none@keysafe.network>".parse().unwrap())
         .to(format!("KS User<{}>", account).parse().unwrap())
         .subject("Confirmation Code")
         .body(String::from(msg))
         .unwrap();
-    let creds = Credentials::new("@qq.com".to_string(), "".to_string());
-    let mailer = SmtpTransport::relay("smtp.qq.com")
+    let creds = Credentials::new("verify@keysafe.network".to_string(), "".to_string());
+    let mailer = SmtpTransport::relay("smtp.qiye.aliyun.com")
         .unwrap()
         .credentials(creds)
         .build();
