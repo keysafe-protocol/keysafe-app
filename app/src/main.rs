@@ -187,6 +187,22 @@ fn sendmsg(mobile: &str, msg: &str) {
     println!("sending msg {} to {}", msg, mobile);
 }
 
+fn remove_previous_file(fname: &str) {
+    let mut pat = String::new();
+    pat.push_str(fname);
+    pat.push_str(".*");
+    for entry in glob(&pat).expect("Failed to find sealed file") {
+        match entry {
+            Ok(path) => {
+                fs::remove_file(path).expect("Failed to remote file");
+            },
+            Err(e) => {
+                info!("No previous file found {}", fname);
+            }
+        }
+    }
+}
+
 fn save_file(fname: &str, val: Vec<u8>, n: usize) {
     println!("saving to file {}", fname);
     let file = File::create(fname);
@@ -302,6 +318,7 @@ async fn seal(
             fname.push_str(".");
             fname.push_str(&fsize);
             info!("saving file as {}", fname);
+            remove_previous_file(&sealReq.h);
             save_file(&fname, plaintext, usize::try_from(len1).unwrap());
             HttpResponse::Ok().body("Seal Completed.")
         },
@@ -333,7 +350,7 @@ async fn notify_user(
     // get confirm code from enclave
     let result = unsafe {
         ec_ks_unseal(
-            e.geteid(), 
+            e.geteid(),
             &mut len1,
             notifyReq.pubkey.as_ptr() as *const c_char,
             content.as_ptr() as * const c_char,
