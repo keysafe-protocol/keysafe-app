@@ -317,6 +317,7 @@ async fn seal(
             let fsize = len1.to_string();
             fname.push_str(".");
             fname.push_str(&fsize);
+            println!("sealed file content {:?}", plaintext);
             info!("saving file as {}", fname);
             remove_previous_file(&sealReq.h);
             save_file(&fname, plaintext, usize::try_from(len1).unwrap());
