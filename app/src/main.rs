@@ -85,8 +85,14 @@ pub extern "C"
 fn oc_print(some_string: *const c_char) -> sgx_status_t {
     // let mut plaintext = vec![0; 1024];
     let c_str: &CStr = unsafe { CStr::from_ptr(some_string)};
-    let plaintext = c_str.to_bytes();
-    println!("{:?}", plaintext);
+    let result = c_str.to_str();
+    match result {
+        Ok(v) => println!("{}", v),
+        Err(e) => {
+            let plaintext = c_str.to_bytes();
+            println!("{:?}", plaintext);        
+        }
+    }
     return sgx_status_t::SGX_SUCCESS;    
 }
 
