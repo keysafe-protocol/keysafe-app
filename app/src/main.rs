@@ -67,8 +67,9 @@ extern {
 
     fn ec_prove_me(
         eid: sgx_enclave_id_t, 
-        retval: *mut sgx_status_t,
-        code: u32,
+        retval: *mut u32,
+        code: *const c_char,
+        code_len: u32,
         unsealed: *mut c_void
     ) -> sgx_status_t;
 
@@ -83,7 +84,6 @@ extern {
 #[no_mangle]
 pub extern "C"
 fn oc_print(some_string: *const c_char) -> sgx_status_t {
-    // let mut plaintext = vec![0; 1024];
     let c_str: &CStr = unsafe { CStr::from_ptr(some_string)};
     let result = c_str.to_str();
     match result {
@@ -203,7 +203,7 @@ fn remove_previous_file(fname: &str) {
                 fs::remove_file(path).expect("Failed to remote file");
             },
             Err(e) => {
-                info!("No previous file found {}", fname);
+                println!("No previous file found {}", fname);
             }
         }
     }
@@ -236,11 +236,11 @@ fn check_sealed(filename: &String) -> u32 {
     for entry in glob(&pat).expect("Failed to find sealed file") {
         match entry {
             Ok(path) => {
-                info!("find file {}", filename);
+                println!("find file {}", filename);
                 return path.extension().unwrap().to_str().unwrap().parse::<u32>().unwrap()
             },
             Err(e) => {
-                info!("unable to find file {}", filename);
+                println!("unable to find file {}", filename);
                 return 0
             }
         }
@@ -324,7 +324,7 @@ async fn seal(
             fname.push_str(".");
             fname.push_str(&fsize);
             println!("sealed file content {:?}", plaintext);
-            info!("saving file as {}", fname);
+            println!("saving file as {}", fname);
             remove_previous_file(&sealReq.h);
             save_file(&fname, plaintext, usize::try_from(len1).unwrap());
             HttpResponse::Ok().body("Seal Completed.")
@@ -342,7 +342,7 @@ async fn notify_user(
     let e = &endex.enclave;
 
     let len3 = check_sealed(&notifyReq.h);
-    info!("file extension is {}", len3.to_string());
+    println!("file extension is {}", len3.to_string());
     if len3 == 0 {
         return HttpResponse::Ok().body("seal not found");
     }
@@ -351,14 +351,15 @@ async fn notify_user(
     let fsize = len3.to_string();
     fname.push_str(".");
     fname.push_str(&fsize);
-    info!("getting file {}", fname);
+    println!("getting file {}", fname);
     let content = get_sealed(&fname);
-    let mut len1 :u32 = 0;
+    println!("file content {:?}", content);
+    let mut return_val :u32 = 0;
     // get confirm code from enclave
     let result = unsafe {
         ec_ks_unseal(
             e.geteid(),
-            &mut len1,
+            &mut return_val,
             notifyReq.pubkey.as_ptr() as *const c_char,
             content.as_ptr() as * const c_char,
             len3
@@ -367,13 +368,13 @@ async fn notify_user(
     match result {
         sgx_status_t::SGX_SUCCESS =>  {
             if notifyReq.t.eq("email") {
-                sendmail(&notifyReq.cond, &len1.to_string());
+                sendmail(&notifyReq.cond, &return_val.to_string());
                 HttpResponse::Ok().body("confirm code sent")
             } else if notifyReq.t.eq("mobile") {
-                sendmsg(&notifyReq.cond, &len1.to_string());
+                sendmsg(&notifyReq.cond, &return_val.to_string());
                 HttpResponse::Ok().body("confirm code sent")
             } else {
-                HttpResponse::Ok().body(len1.to_string())
+                HttpResponse::Ok().body(return_val.to_string())
             }
         },
         _ => panic!("calling unseal failed.")
@@ -387,20 +388,25 @@ async fn prove_user(
 ) -> impl Responder {
     println!("proving {}", &proveReq.cond);
     let e = &endex.enclave;
-    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut retval :u32 = 0;
     let mut plaintext = vec![0; 8192];
+    let buffer = hex::decode(&proveReq.code).expect("Decode Failed.");
+    println!("encrypted code {:?}", buffer);
     let result = unsafe {
         ec_prove_me(
             e.geteid(),
             &mut retval,
-            proveReq.code.parse::<u32>().unwrap() ,
+            buffer.as_ptr() as *const c_char,
+            u32::try_from(buffer.len()).unwrap(),
             plaintext.as_mut_slice().as_mut_ptr() as * mut c_void
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
             plaintext.resize(8192, 0);
-            HttpResponse::Ok().body(plaintext)
+            let hexResponse = hex::encode(&plaintext[0..usize::try_from(retval).unwrap()]);
+            println!("get sealed data as hex {}", hexResponse);
+            HttpResponse::Ok().body(hexResponse)
         },
         _ => panic!("sgx prove me failed!")
     }
@@ -409,7 +415,7 @@ async fn prove_user(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
-    info!("logging!");
+    println!("logging!");
     let edata: web::Data<AppState> = web::Data::new(AppState{
         enclave: init_enclave_and_genkey()
     });
