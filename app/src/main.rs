@@ -82,8 +82,9 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
         sealedSecret: *mut c_void,
-        len: u32,
+        len1: u32,
         encryptedSecret: *mut c_void,
+        len2: u32
     ) -> sgx_status_t;
 
 }
@@ -277,14 +278,16 @@ async fn require_secret(
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext1 = vec![0; 256];
     let mut plaintext2 = vec![0; 256];
-    let mut len: u32 = 0;
+    let mut len1: u32 = 0;
+    let mut len2: u32 = 0;
     let result = unsafe {
         ec_gen_gauth_secret(
             e.geteid(), 
             &mut retval,
             plaintext1.as_mut_slice().as_mut_ptr() as * mut c_void,
-            len,
+            len1,
             plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
+            len2
         )
     };
     match result {
@@ -293,9 +296,9 @@ async fn require_secret(
             plaintext2.resize(256, 0);
             let mut fname: String = requireSecret.h.to_owned();
             println!("sealing gauth secret {:?}", plaintext1);
-            println!("gauth secret length {}", len.to_string());
-            save_file(&fname, plaintext1, usize::try_from(len).unwrap());
-            let hexResponse = hex::encode(&plaintext2[0..256]);
+            println!("gauth secret length {}", len1.to_string());
+            save_file(&fname, plaintext1, usize::try_from(len1).unwrap());
+            let hexResponse = hex::encode(&plaintext2[0..usize::try_from(len2).unwrap()]);
             HttpResponse::Ok().body(hexResponse)
         },
         _ => panic!("require GAuth secret failed!")
