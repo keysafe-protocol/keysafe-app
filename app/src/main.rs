@@ -30,7 +30,6 @@ use glob::glob;
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
-
 extern {
 
     fn ec_gen_key(
@@ -79,6 +78,14 @@ extern {
         len1: u32
     ) -> sgx_status_t;
 
+    fn ec_gen_gauth_secret(
+        eid: sgx_enclave_id_t, 
+        retval: *mut sgx_status_t,
+        sealedSecret: *mut c_void,
+        len: u32,
+        encryptedSecret: *mut c_void,
+    ) -> sgx_status_t;
+
 }
 
 #[no_mangle]
@@ -87,10 +94,10 @@ fn oc_print(some_string: *const c_char) -> sgx_status_t {
     let c_str: &CStr = unsafe { CStr::from_ptr(some_string)};
     let result = c_str.to_str();
     match result {
-        Ok(v) => println!("{}", v),
+        Ok(v) => println!("enclave: {}", v),
         Err(e) => {
             let plaintext = c_str.to_bytes();
-            println!("{:?}", plaintext);        
+            println!("enclave: {:?}", plaintext);        
         }
     }
     return sgx_status_t::SGX_SUCCESS;    
@@ -167,6 +174,13 @@ struct ProveReq {
     code: String
 }
 
+#[derive(Deserialize)]
+struct RequireSecretReq {
+    pubkey: String,
+    h: String,
+    email: String
+}
+
 fn sendmail(account: &str, msg: &str) {
     println!("sending mail {} to {}", msg, account);
     let email = Message::builder()
@@ -210,7 +224,7 @@ fn remove_previous_file(fname: &str) {
 }
 
 fn save_file(fname: &str, val: Vec<u8>, n: usize) {
-    println!("saving to file {}", fname);
+    println!("sealing: saving to file {}", fname);
     let file = File::create(fname);
     match file {
         Ok(mut f) => { 
@@ -252,6 +266,40 @@ fn check_sealed(filename: &String) -> u32 {
 async fn hello() -> impl Responder {
     // for health check
     HttpResponse::Ok().body("Webapp is up and running!")
+}
+
+#[post("/require_secret")]
+async fn require_secret(
+    requireSecret: web::Json<RequireSecretReq>,
+    endex: web::Data<AppState>
+) -> impl Responder {
+    let e = &endex.enclave;
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut plaintext1 = vec![0; 256];
+    let mut plaintext2 = vec![0; 256];
+    let mut len: u32 = 0;
+    let result = unsafe {
+        ec_gen_gauth_secret(
+            e.geteid(), 
+            &mut retval,
+            plaintext1.as_mut_slice().as_mut_ptr() as * mut c_void,
+            len,
+            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            plaintext1.resize(256, 0);
+            plaintext2.resize(256, 0);
+            let mut fname: String = requireSecret.h.to_owned();
+            println!("sealing gauth secret {:?}", plaintext1);
+            println!("gauth secret length {}", len.to_string());
+            save_file(&fname, plaintext1, usize::try_from(len).unwrap());
+            let hexResponse = hex::encode(&plaintext2[0..256]);
+            HttpResponse::Ok().body(hexResponse)
+        },
+        _ => panic!("require GAuth secret failed!")
+    }
 }
 
 #[post("/exchange_key")]
@@ -304,11 +352,11 @@ async fn seal(
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let mut plaintext = vec![0; usize::try_from(len1).unwrap()];
     let result = unsafe {
-        println!("{:?}", buffer);
-        println!("{:?}", sealReq.text);
-        println!("len1 {}", u32::try_from(buffer.len()).unwrap());
-        println!("len2 {}", u32::try_from(sealReq.text.len()).unwrap());
-        println!("len3 {}", len1);
+        println!("sealing encrypted: {:?}", buffer);
+        println!("sealing encrypted length: {}", u32::try_from(buffer.len()).unwrap());
+        println!("sealing raw text: {:?}", sealReq.text);
+        println!("sealing text length: {}", u32::try_from(sealReq.text.len()).unwrap());
+        println!("sealing size: {}", len1);
         ec_ks_seal(e.geteid(), &mut retval,
             buffer.as_ptr() as *const c_char, u32::try_from(buffer.len()).unwrap(),
             sealReq.text.as_ptr() as *const c_char, u32::try_from(sealReq.text.len()).unwrap(),
@@ -323,8 +371,8 @@ async fn seal(
             let fsize = len1.to_string();
             fname.push_str(".");
             fname.push_str(&fsize);
-            println!("sealed file content {:?}", plaintext);
-            println!("saving file as {}", fname);
+            println!("sealing sealed file content {:?}", plaintext);
+            println!("sealing saving file as {}", fname);
             remove_previous_file(&sealReq.h);
             save_file(&fname, plaintext, usize::try_from(len1).unwrap());
             HttpResponse::Ok().body("Seal Completed.")
@@ -338,11 +386,11 @@ async fn notify_user(
     notifyReq: web::Json<NotifyReq>,
     endex: web::Data<AppState>
 ) -> impl Responder {
-    println!("notifying {}", &notifyReq.cond);
+    println!("unsealing notifying {}", &notifyReq.cond);
     let e = &endex.enclave;
 
     let len3 = check_sealed(&notifyReq.h);
-    println!("file extension is {}", len3.to_string());
+    println!("unsealing file extension is {}", len3.to_string());
     if len3 == 0 {
         return HttpResponse::Ok().body("seal not found");
     }
@@ -351,9 +399,10 @@ async fn notify_user(
     let fsize = len3.to_string();
     fname.push_str(".");
     fname.push_str(&fsize);
-    println!("getting file {}", fname);
+    println!("unsealing getting file {}", fname);
     let content = get_sealed(&fname);
-    println!("file content {:?}", content);
+    println!("unsealing file content {:?}", content);
+    println!("unsealing file length: {:?}", content.len());
     let mut return_val :u32 = 0;
     // get confirm code from enclave
     let result = unsafe {
@@ -405,7 +454,7 @@ async fn prove_user(
         sgx_status_t::SGX_SUCCESS => {
             plaintext.resize(8192, 0);
             let hexResponse = hex::encode(&plaintext[0..usize::try_from(retval).unwrap()]);
-            println!("get sealed data as hex {}", hexResponse);
+            println!("proving get sealed data as hex {}", hexResponse);
             HttpResponse::Ok().body(hexResponse)
         },
         _ => panic!("sgx prove me failed!")
@@ -433,6 +482,7 @@ async fn main() -> std::io::Result<()> {
             .service(notify_user)
             .service(prove_user)
             .service(hello)
+            .service(require_secret)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
     .bind_openssl("0.0.0.0:30000", builder)?
