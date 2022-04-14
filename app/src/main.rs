@@ -15,6 +15,7 @@ use sgx_urts::SgxEnclave;
 use std::str;
 use std::ffi::CString;
 use std::ffi::CStr;
+use std::time::SystemTime;
 
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
@@ -81,10 +82,22 @@ extern {
     fn ec_gen_gauth_secret(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
-        sealedSecret: *mut c_void,
+        sealed_secret: *mut c_void,
         len1: u32,
-        encryptedSecret: *mut c_void,
-        len2: u32
+        encrypted_secret: *mut c_void
+    ) -> sgx_status_t;
+
+    fn ec_check_code(
+        eid: sgx_enclave_id_t, 
+        retval: *mut u32,
+        secret: *const c_char,
+        secret_len: u32,
+        tm: u64,
+        code: *const c_char,
+        code_len: u32,
+        data: *const c_char,
+        data_len: u32,
+        unsealed: *mut c_void
     ) -> sgx_status_t;
 
 }
@@ -171,7 +184,7 @@ struct NotifyReq {
 struct ProveReq {
     pubkey: String,
     t: String,
-    cond: String,
+    h: String,
     code: String
 }
 
@@ -224,7 +237,7 @@ fn remove_previous_file(fname: &str) {
     }
 }
 
-fn save_file(fname: &str, val: Vec<u8>, n: usize) {
+fn write_file(fname: &str, val: Vec<u8>, n: usize) {
     println!("sealing: saving to file {}", fname);
     let file = File::create(fname);
     match file {
@@ -236,7 +249,7 @@ fn save_file(fname: &str, val: Vec<u8>, n: usize) {
     } 
 }
 
-fn get_sealed(filename: &String) -> Vec<u8> {
+fn read_file(filename: &String) -> Vec<u8> {
     let content = fs::read(filename);
     match content {
         Ok(x) => x,
@@ -263,6 +276,13 @@ fn check_sealed(filename: &String) -> u32 {
     return 0;
 }
 
+fn system_time() -> u64 {
+    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(n) => n.as_secs(),
+        Err(_) => panic!("SystemTime before UNIX EPOCH!"),
+    }
+}
+
 #[get("/health")]
 async fn hello() -> impl Responder {
     // for health check
@@ -276,29 +296,32 @@ async fn require_secret(
 ) -> impl Responder {
     let e = &endex.enclave;
     let mut retval = sgx_status_t::SGX_SUCCESS;
-    let mut plaintext1 = vec![0; 256];
-    let mut plaintext2 = vec![0; 256];
-    let mut len1: u32 = 0;
-    let mut len2: u32 = 0;
+    let len1: u32 = 770;
+    let len2: u32 = 256;
+    let mut plaintext1 = vec![0; len1.try_into().unwrap()];
+    let mut plaintext2 = vec![0; len2.try_into().unwrap()];
+    println!("calling gen gauth secret");
     let result = unsafe {
         ec_gen_gauth_secret(
             e.geteid(), 
             &mut retval,
             plaintext1.as_mut_slice().as_mut_ptr() as * mut c_void,
             len1,
-            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
-            len2
+            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
-            plaintext1.resize(256, 0);
-            plaintext2.resize(256, 0);
+            println!("calling gen gauth success.");
+            plaintext1.resize(len1.try_into().unwrap(), 0);
+            plaintext2.resize(len2.try_into().unwrap(), 0);
             let mut fname: String = requireSecret.h.to_owned();
+            fname.push_str("_secret");
             println!("sealing gauth secret {:?}", plaintext1);
             println!("gauth secret length {}", len1.to_string());
-            save_file(&fname, plaintext1, usize::try_from(len1).unwrap());
-            let hexResponse = hex::encode(&plaintext2[0..usize::try_from(len2).unwrap()]);
+            write_file(&fname, plaintext1, len1.try_into().unwrap());
+            // println!("getting encrypted gauth secret {}", len2.to_string());
+            let hexResponse = hex::encode(&plaintext2[0..len2.try_into().unwrap()]);
             HttpResponse::Ok().body(hexResponse)
         },
         _ => panic!("require GAuth secret failed!")
@@ -377,7 +400,7 @@ async fn seal(
             println!("sealing sealed file content {:?}", plaintext);
             println!("sealing saving file as {}", fname);
             remove_previous_file(&sealReq.h);
-            save_file(&fname, plaintext, usize::try_from(len1).unwrap());
+            write_file(&fname, plaintext, usize::try_from(len1).unwrap());
             HttpResponse::Ok().body("Seal Completed.")
         },
         _ => panic!("Seal failed!")
@@ -403,7 +426,7 @@ async fn notify_user(
     fname.push_str(".");
     fname.push_str(&fsize);
     println!("unsealing getting file {}", fname);
-    let content = get_sealed(&fname);
+    let content = read_file(&fname);
     println!("unsealing file content {:?}", content);
     println!("unsealing file length: {:?}", content.len());
     let mut return_val :u32 = 0;
@@ -433,16 +456,57 @@ async fn notify_user(
     }
 }
 
+#[post("/prove_code")]
+async fn prove_code(
+    proveReq: web::Json<ProveReq>,
+    endex: web::Data<AppState>
+) -> impl Responder {
+    println!("proving code for {}", &proveReq.t);
+    let e = &endex.enclave;
+    let mut plaintext = vec![0; 8192];
+    let code = hex::decode(&proveReq.code).expect("Decode Failed.");
+    let fname = &proveReq.h;
+    let secret = read_file(&format!("{}_secret", fname));
+    let sealed_len = check_sealed(&fname);
+    let fname2 = &proveReq.h;
+    let sealed = read_file(&format!("{}.{}", fname2, sealed_len.to_string()));
+    let mut retval :u32 = 0;
+    println!("encrypted code {:?}", sealed);
+    let result = unsafe {
+        ec_check_code(
+            e.geteid(),
+            &mut retval,
+            secret.as_ptr() as * const c_char,
+            secret.len().try_into().unwrap(),
+            system_time(),
+            code.as_ptr() as * const c_char,
+            code.len().try_into().unwrap(),
+            sealed.as_ptr() as * const c_char,
+            sealed_len,
+            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            plaintext.resize(8192, 0);
+            let hexResponse = hex::encode(&plaintext[0..usize::try_from(retval).unwrap()]);
+            println!("proving get sealed data as hex {}", hexResponse);
+            HttpResponse::Ok().body(hexResponse)
+        },
+        _ => panic!("sgx prove me failed!")
+    }    
+}
+
 #[post("/prove")]
 async fn prove_user(
     proveReq: web::Json<ProveReq>,
     endex: web::Data<AppState>
 ) -> impl Responder {
-    println!("proving {}", &proveReq.cond);
+    println!("proving {}", &proveReq.pubkey);
     let e = &endex.enclave;
-    let mut retval :u32 = 0;
     let mut plaintext = vec![0; 8192];
     let buffer = hex::decode(&proveReq.code).expect("Decode Failed.");
+    let mut retval :u32 = 0;
     println!("encrypted code {:?}", buffer);
     let result = unsafe {
         ec_prove_me(
@@ -484,6 +548,7 @@ async fn main() -> std::io::Result<()> {
             .service(seal)
             .service(notify_user)
             .service(prove_user)
+            .service(prove_code)
             .service(hello)
             .service(require_secret)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
