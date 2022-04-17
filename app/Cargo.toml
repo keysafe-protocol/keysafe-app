@@ -26,6 +26,7 @@ log = "0.4"
 log4rs = "=1.0.0"
 walkdir = "2"
 glob = "0.3.0"
+mysql = "*"
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }
