@@ -16,3 +16,27 @@ create table teestore (
 )
 ROW_FORMAT=COMPRESSED
 CHARACTER set = utf8mb4;
+
+drop table if exists user_cond;
+create table user_cond (
+    kid varchar(40) not null,
+    cond_type varchar(20) default '' not null,
+    tee_cond_value varchar(1000) default '' not null,
+    tee_cond_size int default 0,
+    PRIMARY KEY(kid, cond_type)
+);
+
+drop table if exists user_secret;
+create table user_secret (
+    kid varchar(40) not null,
+    cond_type varchar(20) default '' not null,
+    delegate_id varchar(40) default '' not null,
+    chain varchar(40) default '' not null,
+    chain_addr varchar(100) default '' not null,
+    tee_secret varchar(8192) default '' not null,
+    tee_secret_size int default 0,
+    INDEX uid using hash(kid),
+    INDEX did using hash(delegate_id),
+    PRIMARY KEY(kid, cond_type)
+);
+
