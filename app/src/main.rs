@@ -18,8 +18,12 @@ extern crate sgx_urts;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
 
+use mysql::prelude::*;
+use mysql::*;
+
 mod ecall;
 mod endpoint;
+mod persistence;
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
@@ -76,13 +80,19 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     return enclave;
 }
 
+fn init_db_pool() -> Pool {
+    let ops = Opts::from_url("mysql://chanrw:Oracle!23@localhost:3306/keysafe").unwrap();
+    let pool = mysql::Pool::new(ops).unwrap();
+    return pool;
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     println!("logging!");
     let edata: web::Data<endpoint::AppState> = web::Data::new(endpoint::AppState{
-        enclave: init_enclave_and_genkey()
+        enclave: init_enclave_and_genkey(),
+        db_pool: init_db_pool()
     });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
@@ -94,7 +104,15 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::clone(&edata))
             .service(endpoint::exchange_key)
+            .service(endpoint::auth)
+            .service(endpoint::auth_confirm)
+            .service(endpoint::info)
+            .service(endpoint::register_mail)
+            .service(endpoint::register_guath)
+            .service(endpoint::register_password)
             .service(endpoint::seal)
+          //  .service(endpoint::unseal)
+            .service(endpoint::delegate)
             .service(endpoint::notify_user)
             .service(endpoint::prove_user)
             .service(endpoint::prove_code)

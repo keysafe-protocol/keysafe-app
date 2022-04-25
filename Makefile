@@ -137,6 +137,7 @@ $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
 	@echo "Cargo  =>  $@"
 	mkdir -p bin
 	cp $(App_Rust_Path)/app ./bin
+	cp ./app/log4rs.yml ./bin
 
 ######## Enclave Objects ########
 
@@ -155,5 +156,5 @@ $(Signed_RustEnclave_Name): $(KS_SGX_SRC)/libenclave_ks.signed.so
 
 .PHONY: clean
 clean:
-	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/libenclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
+	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/log4rs.yml bin/libenclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
 	#@cd app && cargo clean && rm -f Cargo.lock
