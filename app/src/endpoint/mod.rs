@@ -1,31 +1,26 @@
 extern crate openssl;
 #[macro_use]
-
-use std::fs::File;
-use std::fs;
 use std::str;
 use std::time::SystemTime;
-
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, HttpResponse, Responder};
-
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use hex;
-
 use log::{error, info, warn};
-
 extern crate sgx_types;
 extern crate sgx_urts;
 use sgx_types::*;
-
+use sgx_urts::SgxEnclave;
 use mysql::*;
-use mysql::prelude::*;
-
 use crate::ecall;
 use crate::persistence;
-use sgx_urts::SgxEnclave;
 
+
+pub struct AppState {
+    pub enclave: SgxEnclave,
+    pub db_pool: Pool
+}
 
 #[derive(Deserialize)]
 pub struct BaseReq {
@@ -37,9 +32,52 @@ pub struct BaseResp {
     status: String,
 }
 
-pub struct AppState {
-    pub enclave: SgxEnclave,
-    pub db_pool: Pool
+#[derive(Deserialize)]
+pub struct ExchangeKeyReq {
+    key: String
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExchangeKeyResp {
+    status: String,
+    key: String
+}
+
+
+fn bytes2hex(bytes: &[u8]) -> String {
+    hex::encode(bytes)
+}
+
+#[post("/exchange_key")]
+pub async fn exchange_key(
+    ex_key_req: web::Json<ExchangeKeyReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    let e = &endex.enclave;
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    let mut out_key = vec![0; 1024];
+    let mut plaintext2 = vec![0; 1024];
+    println!("user pub key is {}", ex_key_req.key);
+    let result = unsafe {
+        ecall::ec_ks_exchange(e.geteid(), 
+            &mut sgx_result, 
+            ex_key_req.key.as_ptr() as *const c_char,
+            out_key.as_mut_slice().as_mut_ptr() as * mut c_void,
+            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => { 
+            out_key.resize(1024, 0);
+            println!("sgx pub key {:?}", out_key);
+            println!("sgx share key {:?}", plaintext2); //TODO: wil remove, for debug only
+            let hex_resp = bytes2hex(&out_key[0..1024]);
+            HttpResponse::Ok().json(
+                ExchangeKeyResp{status: "SUCCESS".to_string(), key: hex_resp}
+            )
+        },
+        _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
+    }
 }
 
 #[derive(Deserialize)]
@@ -47,7 +85,6 @@ pub struct AuthReq {
     account: String,
     user_pubkey: String,
 }
-
 // with BaseResp
 
 #[post("/auth")]
@@ -56,12 +93,9 @@ pub async fn auth(
     endex: web::Data<AppState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    //call enclave
-    let mut code :u32 = 0;
-    // get confirm code from enclave
+    let mut code :u32 = 0; // get confirm code from tee
     let result = unsafe {
-        ecall::ec_auth(
-            e.geteid(),
+        ecall::ec_auth(e.geteid(),
             &mut code,
             auth_req.account.as_ptr() as *const c_char,
             auth_req.user_pubkey.as_ptr() as *const c_char
@@ -79,9 +113,9 @@ pub async fn auth(
 #[derive(Deserialize)]
 pub struct ConfirmReq {
     account: String,
+    mail: String,
     code: String
 }
-
 // with BaseResp
 
 #[post("/auth_confirm")]
@@ -90,17 +124,16 @@ pub async fn auth_confirm(
     endex: web::Data<AppState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    //call enclave
     let mut retval = sgx_status_t::SGX_SUCCESS;
-    // get confirm code from enclave
-    let bcode = hex::decode(&confirm_req.code).expect("Decode Failed.");
+    // cipher text to bytes
+    let code = hex::decode(&confirm_req.code).expect("Decode Failed.");
     let result = unsafe {
         ecall::ec_auth_confirm(
             e.geteid(),
             &mut retval,
             confirm_req.account.as_ptr() as *const c_char,
-            confirm_req.code.as_ptr() as *const c_char,
-            u32::try_from(bcode.len()).unwrap(),
+            code.as_ptr() as *const c_char,
+            u32::try_from(code.len()).unwrap(),
         )
     };
     match result {
@@ -110,7 +143,6 @@ pub async fn auth_confirm(
         _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
     }
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoResp {
@@ -131,69 +163,45 @@ pub async fn info(
     base_req: web::Json<BaseReq>,
     endex: web::Data<AppState>
 ) -> HttpResponse {
-    let stmt = format!("select * from user_secret where kid = '{}'", base_req.account);
+    // to prevent sql injection 
+    if base_req.account.contains("'") {
+        return HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()});
+    }
+    let stmt = format!(
+        "select * from user_secret where kid = '{}'", 
+        base_req.account
+    );
     let secrets = persistence::query_user_secret(&endex.db_pool, stmt);
-    let dstmt = format!("select * from user_secret where delegate_id = '{}'", base_req.account);
+    let dstmt = format!(
+        "select * from user_secret where delegate_id = '{}'", 
+        base_req.account
+    );
     let dsecrets = persistence::query_user_secret(&endex.db_pool, dstmt);
     let mut v = Vec::new();
     for i in secrets {
-        v.push(Coin {owner: base_req.account.clone(),
-            chain: i.chain.clone(), chain_addr: i.chain_addr.clone()});
+        if i.kid == base_req.account {
+            v.push(Coin {
+                owner: base_req.account.clone(),
+                chain: i.chain.clone(), 
+                chain_addr: i.chain_addr.clone()
+            });
+        }
     }
     for i in &dsecrets {
-        v.push(Coin {owner: i.kid.clone(),
-            chain: i.chain.clone(), 
-            chain_addr: i.chain_addr.clone()});
+        if i.delegate_id == base_req.account {
+            v.push(Coin {
+                owner: i.kid.clone(),
+                chain: i.chain.clone(), 
+                chain_addr: i.chain_addr.clone()
+            });
+        }
     }
     HttpResponse::Ok().json(InfoResp {status: "SUCCESS".to_string(), data: v})
 }
 
-
-#[derive(Deserialize)]
-pub struct ExchangeKeyReq {
-    key: String
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ExchangeKeyResp {
-    status: String,
-    key: String
-}
-
-#[post("/exchange_key")]
-pub async fn exchange_key(
-    ex_key_req: web::Json<ExchangeKeyReq>,
-    endex: web::Data<AppState>
-) -> HttpResponse {
-    let e = &endex.enclave;
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let mut plaintext = vec![0; 1024];
-    let mut plaintext2 = vec![0; 1024];
-    println!("user pub key is {}", ex_key_req.key);
-    let result = unsafe {
-        ecall::ec_ks_exchange(e.geteid(), &mut sgx_result, 
-            ex_key_req.key.as_ptr() as *const c_char,
-            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
-            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
-        )
-    };
-    match result {
-        sgx_status_t::SGX_SUCCESS => { 
-            plaintext.resize(1024, 0);
-            println!("sgx pub key {:?}", plaintext);
-            println!("sgx share key {:?}", plaintext2); //TODO: wil remove, for debug only
-            let hexResponse = hex::encode(&plaintext[0..1024]);
-            HttpResponse::Ok().json(ExchangeKeyResp{status: "SUCCESS".to_string(), key: hexResponse})
-        },
-        _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
-    }
-}
-
-
 #[derive(Deserialize)]
 pub struct RegisterMailAuthReq {
     account: String,
-    code: String,
     mail: String,
 }
 
@@ -203,7 +211,6 @@ pub async fn register_mail_auth(
     endex: web::Data<AppState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    //call enclave
     let mut code :u32 = 0;
     // get confirm code from enclave
     let bcode = hex::decode(&reg_mail_auth_req.code).expect("Decode Failed.");
@@ -225,41 +232,65 @@ pub async fn register_mail_auth(
     }
 }
 
-// register mail use ConfirmReq and BaseResp
-#[post("/register_mail")]
-pub async fn register_mail(
-    register_mail_req: web::Json<ConfirmReq>,
-    endex: web::Data<AppState>
-) -> HttpResponse {
-    let e = &endex.enclave;
-    //call enclave
-    let mut retval = sgx_status_t::SGX_SUCCESS;
-    //TODO: fix calculate size
-    let mut plaintext = vec![0; usize::try_from(len1).unwrap()];
-    let mut len :u32 = 0;
-    // get confirm code from enclave
-    let bcode = hex::decode(&register_mail_req.code).expect("Decode Failed.");
+
+#[derive(Deserialize)]
+pub struct RegisterMailReq {
+    account: String,
+    mail: String,
+    code: String
+}
+
+fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
+    let mut size: u32 = 0;
+    let bcode = hex::decode(&hex_str).expect("Decode Failed.");
     let result = unsafe {
-        ecall::ec_register_mail(
-            e.geteid(),
-            &mut retval,
-            register_mail_req.account.as_ptr() as *const c_char,
-            register_mail_req.code.as_ptr() as *const c_char,
-            u32::try_from(bcode.len()).unwrap(),
-            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
-            len
+        ecall::ec_calc_sealed_size(
+            e,
+            &mut size,
+            u32::try_from(bcode.len()).unwrap()
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS =>  {
-            let e = hex::encode(&plaintext[0..len as usize]);
+            size.try_into().unwrap()
+        },
+        _ => 0
+    }
+}
+
+// register mail use ConfirmReq and BaseResp
+#[post("/register_mail")]
+pub async fn register_mail(
+    register_mail_req: web::Json<RegisterMailReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    let e = &endex.enclave;
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    let sealed_size = calc_tee_size(e.geteid(), &register_mail_req.mail);
+    let bcode = hex::decode(&register_mail_req.code).expect("Decode Failed.");
+    let mut sealed = vec![0; sealed_size.try_into().unwrap()];
+    let result = unsafe {
+        ecall::ec_register_mail(
+            e.geteid(),
+            &mut sgx_result,
+            register_mail_req.account.as_ptr() as *const c_char,
+            bcode.as_ptr() as *const c_char,
+            u32::try_from(bcode.len()).unwrap(),
+            sealed.as_mut_slice().as_mut_ptr() as * mut c_void,
+            sealed_size.try_into().unwrap()
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS =>  {
+            let e = hex::encode(&sealed[0..sealed_size]);
+            //delete before insert
             persistence::insert_user_cond(
                 &endex.db_pool, 
                 persistence::UserCond {
                     kid: register_mail_req.account.clone(),
                     cond_type: "email".to_string(),
                     tee_cond_value: e,
-                    tee_cond_size: len.try_into().unwrap()
+                    tee_cond_size: sealed_size.try_into().unwrap()
                 }
             );
             HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
@@ -274,33 +305,31 @@ pub async fn register_password(
     endex: web::Data<AppState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    //call enclave
+    let sealed_size = calc_tee_size(e.geteid(), &register_password_req.code);
     let mut retval = sgx_status_t::SGX_SUCCESS;
-    let mut plaintext = vec![0; usize::try_from(len1).unwrap()];
-    let mut len :u32 = 0;
-    // get confirm code from enclave
+    let mut sealed = vec![0; usize::try_from(sealed_size).unwrap()];
     let bcode = hex::decode(&register_password_req.code).expect("Decode Failed.");
     let result = unsafe {
         ecall::ec_register_mail(
             e.geteid(),
             &mut retval,
             register_password_req.account.as_ptr() as *const c_char,
-            register_password_req.code.as_ptr() as *const c_char,
+            bcode.as_ptr() as *const c_char,
             u32::try_from(bcode.len()).unwrap(),
-            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
-            len
+            sealed.as_mut_slice().as_mut_ptr() as * mut c_void,
+            sealed_size.try_into().unwrap()
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS =>  {
-            let e = hex::encode(&plaintext[0..len as usize]);
+            let e = hex::encode(&sealed[0..sealed_size]);
             persistence::insert_user_cond(
                 &endex.db_pool, 
                 persistence::UserCond {
                     kid: register_password_req.account.clone(),
                     cond_type: "password".to_string(),
                     tee_cond_value: e,
-                    tee_cond_size: len.try_into().unwrap()
+                    tee_cond_size: sealed_size.try_into().unwrap()
                 }
             );
             HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
@@ -314,8 +343,9 @@ pub struct RegisterGauthResp {
     status: String,
     gauth: String,
 }
+
 #[post("/register_gauth")]
-pub async fn register_guath(
+pub async fn register_gauth(
     register_gauth_req: web::Json<BaseReq>,
     endex: web::Data<AppState>
 ) -> HttpResponse {
@@ -323,8 +353,8 @@ pub async fn register_guath(
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let cipher_size: u32 = 770;
     let sealed_size: u32 = 256;
-    let mut cipher_gauth = vec![0; len1.try_into().unwrap()];
-    let mut sealed_gauth = vec![0; len2.try_into().unwrap()];
+    let mut cipher_gauth = vec![0; cipher_size.try_into().unwrap()];
+    let mut sealed_gauth = vec![0; sealed_size.try_into().unwrap()];
     println!("calling gen gauth secret");
     let result = unsafe {
         ecall::ec_register_gauth(
@@ -343,19 +373,20 @@ pub async fn register_guath(
             sealed_gauth.resize(sealed_size.try_into().unwrap(), 0);
             cipher_gauth.resize(cipher_size.try_into().unwrap(), 0);
             // save sealed to db
+            let e = hex::encode(&sealed_gauth[0..sealed_size.try_into().unwrap()]);
             persistence::insert_user_cond(
                 &endex.db_pool,
                 persistence::UserCond {
                     kid: register_gauth_req.account.clone(),
                     cond_type: "gauth".to_string(),
-                    tee_cond_value: hex::encode(&sealed_gauth),
+                    tee_cond_value: e,
                     tee_cond_size: sealed_size.try_into().unwrap()
                 }
             );
             // return cipher to user
             HttpResponse::Ok().json(RegisterGauthResp{
                 status: "SUCCESS".to_string(),
-                gauth: hex::encode(&cipher_gauth)
+                gauth: hex::encode(&cipher_gauth[0..cipher_size.try_into().unwrap()])
             })
         },
         _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
@@ -401,40 +432,26 @@ pub async fn seal(
     endex: web::Data<AppState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    let buffer = hex::decode(&seal_req.cipher_secret).expect("Decode Failed.");
-    let mut len1 :u32 = 0;
-    let result1 = unsafe {
-        ecall::ec_calc_sealed_size(
-            e.geteid(), &mut len1, u32::try_from(buffer.len()).unwrap())
-    };
-
-    match result1 {
-        sgx_status_t::SGX_SUCCESS => {
-        },
-        _ => panic!("calc size failed.")
-    };
-
+    let sealed_size = calc_tee_size(e.geteid(), &seal_req.cipher_secret);
     let mut retval = sgx_status_t::SGX_SUCCESS;
-    let mut plaintext = vec![0; usize::try_from(len1).unwrap()];
+    let mut sealed = vec![0; usize::try_from(sealed_size).unwrap()];
+    let cipher_secret = hex::decode(&seal_req.cipher_secret).expect("Decode Failed.");
+    println!("sealing encrypted: {:?}", seal_req.cipher_secret);
+    println!("sealing encrypted length: {}", sealed_size);
+
     let result = unsafe {
-        println!("sealing encrypted: {:?}", buffer);
-        println!("sealing encrypted length: {}", u32::try_from(buffer.len()).unwrap());
-        println!("sealing raw text: {:?}", seal_req.cipher_secret);
-        println!("sealing text length: {}", u32::try_from(seal_req.cipher_secret.len()).unwrap());
-        println!("sealing size: {}", len1);
         ecall::ec_ks_seal(e.geteid(), &mut retval,
-            buffer.as_ptr() as *const c_char, 
-            u32::try_from(buffer.len()).unwrap(),
-            seal_req.cipher_secret.as_ptr() as *const c_char, 
-            u32::try_from(seal_req.cipher_secret.len()).unwrap(),
-            plaintext.as_mut_slice().as_mut_ptr() as * mut c_void,
-            len1
+            seal_req.account.as_ptr() as *const c_char,
+            cipher_secret.as_ptr() as *const c_char, 
+            u32::try_from(cipher_secret.len()).unwrap(),
+            sealed.as_mut_slice().as_mut_ptr() as * mut c_void,
+            sealed_size.try_into().unwrap()
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
-            plaintext.resize(usize::try_from(len1).unwrap(), 0);
-            let fsize = len1.to_string();
+            sealed.resize(usize::try_from(sealed_size).unwrap(), 0);
+            let e = hex::encode(&sealed[0..sealed_size.try_into().unwrap()]);
             persistence::insert_user_secret(
                 &endex.db_pool,
                 persistence::UserSecret {
@@ -443,8 +460,8 @@ pub async fn seal(
                     chain: seal_req.chain.clone(),
                     delegate_id: "".to_string(),
                     chain_addr: seal_req.chain_addr.clone(),
-                    tee_secret: hex::encode(&plaintext),
-                    tee_secret_size: fsize.parse::<i32>().unwrap()
+                    tee_secret: e,
+                    tee_secret_size: sealed_size.try_into().unwrap()
                 }
             );
             HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
@@ -468,6 +485,7 @@ pub struct UnsealResp {
     secret: String
 }
 
+#[post("/unseal")]
 pub async fn unseal(
     unseal_req: web::Json<UnsealReq>,
     endex: web::Data<AppState>
@@ -549,7 +567,6 @@ fn sendmail(account: &str, msg: &str) {
         Err(e) => panic!("Could not send email: {:?}", e),
     }
 }
-
 
 fn system_time() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {

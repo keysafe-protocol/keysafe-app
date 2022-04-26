@@ -74,12 +74,11 @@ extern {
     pub fn ec_ks_seal(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
-        some_string: *const c_char,
-        len1: u32,
-        text: *const c_char,
-        len2: u32,
-        strval: *mut c_void,
-        len3: u32
+        account: *const c_char,
+        cipher_secret: *const c_char,
+        cipher_size: u32,
+        sealed_secret: *mut c_void,
+        sealed_size: u32
     ) -> sgx_status_t;
 
     pub fn ec_ks_unseal2(
@@ -95,7 +94,6 @@ extern {
         unsealed_secret: *mut c_void,
         unsealed_secret_size: u32
     ) -> sgx_status_t;
-
 
     pub fn ec_ks_unseal(
         eid: sgx_enclave_id_t, 
