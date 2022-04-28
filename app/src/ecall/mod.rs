@@ -29,16 +29,16 @@ extern {
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
         account: *const c_char,
-        code_cipher: *const c_char,
-        code_cipher_len: u32
+        cipher_code: *const c_char,
+        cipher_size: u32
     ) -> sgx_status_t;
 
     pub fn ec_gen_register_mail_code(
         eid :sgx_enclave_id_t,
         retval: *mut u32,
         account: *const c_char,
-        cipher: *const c_char,
-        cipher_len: u32
+        cipher_code: *const c_char,
+        cipher_size: u32
     ) -> sgx_status_t;
 
     pub fn ec_register_mail(
@@ -85,8 +85,9 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut u32,
         account: *const c_char,
-        cipher_cond: *const c_char,
+        cipher_cond: *const c_char, // user encrypted password or confirm code or etc
         cipher_cond_size: u32,
+        cond_type: *const c_char,
         sealed_cond: *const c_char,
         sealed_cond_size: u32,
         sealed_secret: *const c_char,
