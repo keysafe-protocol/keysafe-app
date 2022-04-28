@@ -15,11 +15,12 @@ use sgx_urts::SgxEnclave;
 use mysql::*;
 use crate::ecall;
 use crate::persistence;
-
+use std::collections::HashMap;
 
 pub struct AppState {
     pub enclave: SgxEnclave,
-    pub db_pool: Pool
+    pub db_pool: Pool,
+    pub conf: HashMap<String, String>
 }
 
 #[derive(Deserialize)]
@@ -101,7 +102,7 @@ pub async fn auth(
     };
     match result {
         sgx_status_t::SGX_SUCCESS =>  {
-            sendmail(&auth_req.account, &code.to_string());
+            sendmail(&auth_req.account, &code.to_string(), &endex.conf);
             HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
         },
         _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
@@ -224,7 +225,7 @@ pub async fn register_mail_auth(
     };
     match result {
         sgx_status_t::SGX_SUCCESS =>  {
-            sendmail(&reg_mail_auth_req.mail, &code.to_string());
+            sendmail(&reg_mail_auth_req.mail, &code.to_string(), &endex.conf);
             HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
         },
         _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
@@ -545,8 +546,12 @@ pub async fn unseal(
     }
 }  
 
-fn sendmail(account: &str, msg: &str) {
-    println!("sending mail {} to {}", msg, account);
+fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) {
+    if conf.get("env").unwrap() == "dev" {
+        println!("send mail {} to {}", msg, account);
+        return;
+    }
+    println!("send mail {} to {}", msg, account);
     let email = Message::builder()
         .from("Verification Node <verify@keysafe.network>".parse().unwrap())
         .reply_to("None <none@keysafe.network>".parse().unwrap())
@@ -554,8 +559,11 @@ fn sendmail(account: &str, msg: &str) {
         .subject("Confirmation Code")
         .body(String::from(msg))
         .unwrap();
-    let creds = Credentials::new("verify@keysafe.network".to_string(), "".to_string());
-    let mailer = SmtpTransport::relay("smtp.qiye.aliyun.com")
+    let email_account = conf.get("email_account").unwrap();
+    let email_password = conf.get("email_password").unwrap();
+    let email_server = conf.get("email_server").unwrap();
+    let creds = Credentials::new(email_account.to_owned(), email_password.to_owned());
+    let mailer = SmtpTransport::relay(email_server)
         .unwrap()
         .credentials(creds)
         .build();
@@ -655,7 +663,7 @@ pub async fn notify_user(
     match result {
         sgx_status_t::SGX_SUCCESS =>  {
             if notifyReq.t.eq("email") {
-                sendmail(&notifyReq.cond, &return_val.to_string());
+                sendmail(&notifyReq.cond, &return_val.to_string(), &endex.conf);
                 HttpResponse::Ok().body("confirm code sent")
             } else if notifyReq.t.eq("mobile") {
                 HttpResponse::Ok().body("confirm code sent")

@@ -1,0 +1,6 @@
+env = ""
+email_account = "verify@keysafe.network"
+email_password = ""
+email_server = ""
+db_user = ""
+db_password = ""
