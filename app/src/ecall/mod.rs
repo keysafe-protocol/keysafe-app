@@ -14,8 +14,8 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
         user_pub_key: *const c_char,
-        strval: *mut c_void,
-        strval2: *mut c_void
+        strval: *mut c_char,
+        strval2: *mut c_char
     ) -> sgx_status_t;
 
     pub fn ec_auth(

@@ -40,38 +40,34 @@ pub struct ExchangeKeyReq {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExchangeKeyResp {
     status: String,
-    key: String
+    key: Vec<c_char>
 }
 
 #[post("/exchange_key")]
 pub async fn exchange_key(
     ex_key_req: web::Json<ExchangeKeyReq>,
     endex: web::Data<AppState>
-) -> HttpResponse {
+) ->  impl Responder {
     let e = &endex.enclave;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let mut out_key = vec![0; 1024];
-    let mut plaintext2 = vec![0; 1024];
+    let mut out_key = vec![0; 256];
+    let mut plaintext2 = vec![0; 256];
     println!("user pub key is {}", ex_key_req.key);
     let result = unsafe {
         ecall::ec_ks_exchange(e.geteid(), 
             &mut sgx_result, 
             ex_key_req.key.as_ptr() as *const c_char,
-            out_key.as_mut_slice().as_mut_ptr() as * mut c_void,
-            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_void,
+            out_key.as_mut_slice().as_mut_ptr() as * mut c_char,
+            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_char,
         )
     };
     match result {
         sgx_status_t::SGX_SUCCESS => { 
-            out_key.resize(1024, 0);
-            let hex_resp = hex::encode(&out_key[0..1024]);
+            out_key.resize(256, 0);
             println!("sgx pub key {:?}", out_key);
-            println!("sgx pub key {:?}", hex_resp);
-            HttpResponse::Ok().json(
-                ExchangeKeyResp{status: "SUCCESS".to_string(), key: hex_resp}
-            )
+            HttpResponse::Ok().body(out_key)
         },
-        _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
+        _ => panic!("exchang key failed.")
     }
 }
 
