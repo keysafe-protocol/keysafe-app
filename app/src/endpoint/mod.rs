@@ -193,7 +193,8 @@ pub async fn info(
 #[derive(Deserialize)]
 pub struct RegisterMailAuthReq {
     account: String,
-    mail: String,
+    cipher_mail: String,
+    mail: String
 }
 
 #[post("/register_mail_auth")]
@@ -204,7 +205,7 @@ pub async fn register_mail_auth(
     let e = &endex.enclave;
     let mut code :u32 = 0;
     // get confirm code from enclave
-    let bcode = hex::decode(&reg_mail_auth_req.mail).expect("Decode Failed.");
+    let bcode = hex::decode(&reg_mail_auth_req.cipher_mail).expect("Decode Failed.");
     let result = unsafe {
         ecall::ec_gen_register_mail_code(
             e.geteid(),
@@ -222,7 +223,6 @@ pub async fn register_mail_auth(
         _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
     }
 }
-
 
 #[derive(Deserialize)]
 pub struct RegisterMailReq {

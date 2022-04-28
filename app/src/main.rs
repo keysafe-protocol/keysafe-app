@@ -107,6 +107,7 @@ async fn main() -> std::io::Result<()> {
             .service(endpoint::auth)
             .service(endpoint::auth_confirm)
             .service(endpoint::info)
+            .service(endpoint::register_mail_auth)
             .service(endpoint::register_mail)
             .service(endpoint::register_gauth)
             .service(endpoint::register_password)
