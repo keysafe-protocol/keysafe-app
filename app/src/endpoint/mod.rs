@@ -50,7 +50,7 @@ pub async fn exchange_key(
 ) ->  impl Responder {
     let e = &endex.enclave;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let mut out_key = vec![0; 256];
+    let mut out_key: Vec<u8> = vec![0; 256];
     let mut plaintext2 = vec![0; 256];
     println!("user pub key is {}", ex_key_req.key);
     let result = unsafe {
@@ -64,8 +64,15 @@ pub async fn exchange_key(
     match result {
         sgx_status_t::SGX_SUCCESS => { 
             out_key.resize(256, 0);
-            println!("sgx pub key {:?}", out_key);
-            HttpResponse::Ok().body(out_key)
+            let mut chars: Vec<char>= Vec::new();
+            for i in out_key {
+                if i != 0 {
+                    chars.push(i as char);
+                }
+            }
+            let hex_key: String = chars.into_iter().collect();
+            println!("sgx pub key {}", hex_key);
+            HttpResponse::Ok().body(hex_key)
         },
         _ => panic!("exchang key failed.")
     }
