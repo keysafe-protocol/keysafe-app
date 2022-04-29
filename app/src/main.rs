@@ -25,6 +25,9 @@ mod ecall;
 mod endpoint;
 mod persistence;
 
+use config::Config;
+use std::collections::HashMap;
+
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
 #[no_mangle]
@@ -80,19 +83,33 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     return enclave;
 }
 
-fn init_db_pool() -> Pool {
-    let ops = Opts::from_url("mysql://chanrw:Oracle!23@localhost:3306/keysafe").unwrap();
+fn init_db_pool(conf: &HashMap<String, String>) -> Pool {
+    let db_user = conf.get("db_user").unwrap();
+    let db_password = conf.get("db_password").unwrap();
+    let db_url = format!("mysql://{}:{}@localhost:3306/keysafe", db_user, db_password);
+    let ops = Opts::from_url(&db_url).unwrap();
     let pool = mysql::Pool::new(ops).unwrap();
     return pool;
+}
+
+fn load_conf() -> HashMap<String, String> {
+    Config::builder()
+        .add_source(config::File::with_name("conf"))
+        .build()
+        .unwrap()
+        .try_deserialize::<HashMap<String, String>>()
+        .unwrap()
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     println!("logging!");
+    let conf = load_conf();
     let edata: web::Data<endpoint::AppState> = web::Data::new(endpoint::AppState{
         enclave: init_enclave_and_genkey(),
-        db_pool: init_db_pool()
+        db_pool: init_db_pool(&conf),
+        conf: conf
     });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
@@ -107,17 +124,18 @@ async fn main() -> std::io::Result<()> {
             .service(endpoint::auth)
             .service(endpoint::auth_confirm)
             .service(endpoint::info)
+            .service(endpoint::register_mail_auth)
             .service(endpoint::register_mail)
-            .service(endpoint::register_guath)
+            .service(endpoint::register_gauth)
             .service(endpoint::register_password)
             .service(endpoint::seal)
-          //  .service(endpoint::unseal)
+            .service(endpoint::unseal)
             .service(endpoint::delegate)
-            .service(endpoint::notify_user)
-            .service(endpoint::prove_user)
-            .service(endpoint::prove_code)
+            // .service(endpoint::notify_user)
+            // .service(endpoint::prove_user)
+            // .service(endpoint::prove_code)
             .service(endpoint::hello)
-            .service(endpoint::require_secret)
+            // .service(endpoint::require_secret)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
     .bind_openssl("0.0.0.0:30000", builder)?
