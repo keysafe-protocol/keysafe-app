@@ -28,6 +28,7 @@ walkdir = "2"
 glob = "0.3.0"
 mysql = "*"
 config = "0.13.1"
+rand = "0.8.5"
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }

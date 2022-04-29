@@ -25,6 +25,7 @@ mod persistence;
 
 use config::Config;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
@@ -109,6 +110,9 @@ async fn main() -> std::io::Result<()> {
         db_pool: init_db_pool(&conf),
         conf: conf
     });
+    let ustate: web::Data<endpoint::UserState> = web::Data::new(endpoint::UserState{
+        state: Arc::new(Mutex::new(HashMap::new()))
+    });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
         .set_private_key_file("certs/MyKey.key", SslFiletype::PEM)
@@ -119,6 +123,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::clone(&edata))
+            .app_data(web::Data::clone(&ustate))
             .service(endpoint::exchange_key)
             .service(endpoint::auth)
             .service(endpoint::auth_confirm)

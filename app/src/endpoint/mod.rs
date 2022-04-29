@@ -16,11 +16,17 @@ use mysql::*;
 use crate::ecall;
 use crate::persistence;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use rand::{thread_rng, Rng};
 
 pub struct AppState {
     pub enclave: SgxEnclave,
     pub db_pool: Pool,
     pub conf: HashMap<String, String>
+}
+
+pub struct UserState {
+    pub state: Arc<Mutex<HashMap<String, String>>>
 }
 
 #[derive(Deserialize)]
@@ -42,6 +48,11 @@ pub struct ExchangeKeyReq {
 pub struct ExchangeKeyResp {
     status: String,
     key: Vec<c_char>
+}
+
+fn gen_random() -> i32 {
+    let mut rng = thread_rng();
+    rng.gen_range(1000..9999)
 }
 
 #[post("/exchange_key")]
@@ -89,24 +100,15 @@ pub struct AuthReq {
 #[post("/auth")]
 pub async fn auth(
     auth_req: web::Json<AuthReq>,
-    endex: web::Data<AppState>
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    let mut code :u32 = 0; // get confirm code from tee
-    let result = unsafe {
-        ecall::ec_auth(e.geteid(),
-            &mut code,
-            auth_req.account.as_ptr() as *const c_char,
-            auth_req.key.as_ptr() as *const c_char
-        )
-    };
-    match result {
-        sgx_status_t::SGX_SUCCESS =>  {
-            sendmail(&auth_req.account, &code.to_string(), &endex.conf);
-            HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
-        },
-        _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
-    }
+    let result = gen_random();
+    sendmail(&auth_req.account, &result.to_string(), &endex.conf);
+    let mut states = user_state.state.lock().unwrap();
+    states.insert(auth_req.account.clone(), result.to_string());
+    HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
 }
 
 #[derive(Deserialize)]
@@ -120,26 +122,24 @@ pub struct ConfirmReq {
 #[post("/auth_confirm")]
 pub async fn auth_confirm(
     confirm_req: web::Json<ConfirmReq>,
-    endex: web::Data<AppState>
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    let mut retval = sgx_status_t::SGX_SUCCESS;
-    // cipher text to bytes
-    let code = hex::decode(&confirm_req.cipher_code).expect("Decode Failed.");
-    let result = unsafe {
-        ecall::ec_auth_confirm(
-            e.geteid(),
-            &mut retval,
-            confirm_req.account.as_ptr() as *const c_char,
-            code.as_ptr() as *const c_char,
-            u32::try_from(code.len()).unwrap(),
-        )
-    };
-    match result {
-        sgx_status_t::SGX_SUCCESS =>  {
-            HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+    let mut states = user_state.state.lock().unwrap();
+    match states.get(&confirm_req.account) {
+        Some(v) => {
+            if v == &confirm_req.cipher_code {
+                HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+            } else {
+                states.remove(&confirm_req.account); 
+                HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            }
         },
-        _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
+        None => { 
+            states.remove(&confirm_req.account); 
+            HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+        }
     }
 }
 
@@ -208,28 +208,15 @@ pub struct RegisterMailAuthReq {
 #[post("/register_mail_auth")]
 pub async fn register_mail_auth(
     reg_mail_auth_req: web::Json<RegisterMailAuthReq>,
-    endex: web::Data<AppState>
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    let mut code :u32 = 0;
-    // get confirm code from enclave
-    let bcode = hex::decode(&reg_mail_auth_req.cipher_mail).expect("Decode Failed.");
-    let result = unsafe {
-        ecall::ec_gen_register_mail_code(
-            e.geteid(),
-            &mut code,
-            reg_mail_auth_req.account.as_ptr() as *const c_char,
-            bcode.as_ptr() as *const c_char,
-            u32::try_from(bcode.len()).unwrap(),
-        )
-    };
-    match result {
-        sgx_status_t::SGX_SUCCESS =>  {
-            sendmail(&reg_mail_auth_req.mail, &code.to_string(), &endex.conf);
-            HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
-        },
-        _ => HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()})
-    }
+    let result = gen_random();
+    sendmail(&reg_mail_auth_req.cipher_mail, &result.to_string(), &endex.conf);
+    let mut states = user_state.state.lock().unwrap();
+    states.insert(reg_mail_auth_req.account.clone(), result.to_string());
+    HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
 }
 
 #[derive(Deserialize)]
