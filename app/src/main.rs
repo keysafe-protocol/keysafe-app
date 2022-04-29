@@ -6,8 +6,7 @@ extern crate log4rs;
 use std::str;
 use std::ffi::CStr;
 
-use serde_derive::{Deserialize, Serialize};
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as afs;
 
@@ -18,7 +17,6 @@ extern crate sgx_urts;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
 
-use mysql::prelude::*;
 use mysql::*;
 
 mod ecall;
@@ -27,16 +25,19 @@ mod persistence;
 
 use config::Config;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
 #[no_mangle]
 pub extern "C"
-fn oc_print(some_string: *const c_char) -> sgx_status_t {
-    let c_str: &CStr = unsafe { CStr::from_ptr(some_string)};
+fn oc_print(msg: *const c_char) -> sgx_status_t {
+    let c_str: &CStr = unsafe { CStr::from_ptr(msg)};
     let result = c_str.to_str();
     match result {
+        // if successfully decode to a utf8 string
         Ok(v) => println!("enclave: {}", v),
+        // else it is a bytes array
         Err(e) => {
             let plaintext = c_str.to_bytes();
             println!("enclave: {:?}", plaintext);        
@@ -46,19 +47,17 @@ fn oc_print(some_string: *const c_char) -> sgx_status_t {
 }
 
 fn init_enclave() -> SgxEnclave {
-    error!("{}", "abc");
     let mut launch_token: sgx_launch_token_t = [0; 1024];
     let mut launch_token_updated: i32 = 0;
     // call sgx_create_enclave to initialize an enclave instance
-    // Debug Support: set 2nd parameter to 1
     let debug = 1;
     let mut misc_attr = sgx_misc_attribute_t {secs_attr: sgx_attributes_t { flags:0, xfrm:0}, misc_select:0};
-    let sgxResult = SgxEnclave::create(ENCLAVE_FILE,
+    let sgx_result = SgxEnclave::create(ENCLAVE_FILE,
                        debug,
                        &mut launch_token,
                        &mut launch_token_updated,
                        &mut misc_attr);
-    match sgxResult {
+    match sgx_result {
         Ok(r) => {
             println!("[+] Init Enclave Successful {}!", r.geteid());
             return r;
@@ -71,10 +70,10 @@ fn init_enclave() -> SgxEnclave {
 
 fn init_enclave_and_genkey() -> SgxEnclave {
     let enclave = init_enclave();
-    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
 
     let result = unsafe {
-        ecall::ec_gen_key(enclave.geteid(), &mut retval)
+        ecall::ec_gen_key(enclave.geteid(), &mut sgx_result)
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {},
@@ -92,9 +91,9 @@ fn init_db_pool(conf: &HashMap<String, String>) -> Pool {
     return pool;
 }
 
-fn load_conf() -> HashMap<String, String> {
+fn load_conf(fname: &str) -> HashMap<String, String> {
     Config::builder()
-        .add_source(config::File::with_name("conf"))
+        .add_source(config::File::with_name(fname))
         .build()
         .unwrap()
         .try_deserialize::<HashMap<String, String>>()
@@ -105,11 +104,14 @@ fn load_conf() -> HashMap<String, String> {
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     println!("logging!");
-    let conf = load_conf();
+    let conf = load_conf("conf");
     let edata: web::Data<endpoint::AppState> = web::Data::new(endpoint::AppState{
         enclave: init_enclave_and_genkey(),
         db_pool: init_db_pool(&conf),
-        conf: conf
+        conf: conf.clone()
+    });
+    let ustate: web::Data<endpoint::UserState> = web::Data::new(endpoint::UserState{
+        state: Arc::new(Mutex::new(HashMap::new()))
     });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
@@ -117,9 +119,11 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
+    let server_url = format!("0.0.0.0:{}", conf.get("node_api_port").unwrap());
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::clone(&edata))
+            .app_data(web::Data::clone(&ustate))
             .service(endpoint::exchange_key)
             .service(endpoint::auth)
             .service(endpoint::auth_confirm)
@@ -138,7 +142,7 @@ async fn main() -> std::io::Result<()> {
             // .service(endpoint::require_secret)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
-    .bind_openssl("0.0.0.0:30000", builder)?
+    .bind_openssl(server_url, builder)?
     .run()
     .await
 }

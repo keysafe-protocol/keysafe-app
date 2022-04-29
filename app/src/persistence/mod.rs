@@ -30,7 +30,7 @@ pub fn insert_user_cond(pool: &Pool, ucond: UserCond) {
     tx.exec_drop("delete from user_cond where kid = ? and cond_type = ?",
         (ucond.kid.clone(), ucond.cond_type.clone())).unwrap();
     tx.exec_drop("insert into user_cond (kid, cond_type, tee_cond_value, tee_cond_size) values (?, ?, ?, ?)",
-        (ucond.kid, ucond.cond_type, ucond.tee_cond_value)).unwrap();
+        (ucond.kid, ucond.cond_type, ucond.tee_cond_value, ucond.tee_cond_size)).unwrap();
     tx.commit().unwrap();
 }
 
@@ -41,7 +41,7 @@ pub fn insert_user_secret(pool: &Pool, usecret: UserSecret) {
         (usecret.kid.clone(), usecret.cond_type.clone())).unwrap();
     tx.exec_drop(
         "insert into user_secret (kid, cond_type, chain, chain_addr, tee_secret, tee_secret_size) values (?, ?, ?, ?, ?, ?)",
-        (usecret.kid, usecret.cond_type, usecret.chain, usecret.chain_addr, usecret.tee_secret)).unwrap();
+        (usecret.kid, usecret.cond_type, usecret.chain, usecret.chain_addr, usecret.tee_secret, usecret.tee_secret_size)).unwrap();
     tx.commit().unwrap();
 }
 
