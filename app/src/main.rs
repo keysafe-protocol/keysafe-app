@@ -72,7 +72,7 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
 
     let result = unsafe {
-        ecall::ec_gen_key(enclave.geteid(), &mut retval)
+        ecall::ec_gen_key(enclave.geteid(), &mut sgx_result)
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {},
@@ -107,7 +107,7 @@ async fn main() -> std::io::Result<()> {
     let edata: web::Data<endpoint::AppState> = web::Data::new(endpoint::AppState{
         enclave: init_enclave_and_genkey(),
         db_pool: init_db_pool(&conf),
-        conf: conf
+        conf: conf.clone()
     });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
@@ -115,7 +115,7 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
-    let server_url = format!("0.0.0.0:{}", &conf.get("node_api_port").unwrap());
+    let server_url = format!("0.0.0.0:{}", conf.clone().get("node_api_port").unwrap());
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::clone(&edata))
