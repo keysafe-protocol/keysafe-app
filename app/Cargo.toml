@@ -10,6 +10,7 @@ edition = "2021"
 sgx_types = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_urts = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 actix-web = { version = "4", features = ["openssl"] }
+actix-cors = "0.6.1"
 actix-files = { version = "0.6.0" }
 futures-util = { version = "=0.3.17", default-features = false, features = ["sink"] }
 scoped-tls = "=1.0"
