@@ -1,7 +1,17 @@
 # keysafe-sgx
-# env setup
+# requirements
+## linux-sgx
 + follow https://github.com/intel/linux-sgx#build-and-install-the-intelr-sgx-driver
-+ install linux-sgx 
++ install linux-sgx
++ keysafe relies on intel-sgx to seal the shards of user secrets
+## baidu-rust-sgx-sdk
++ follow https://github.com/apache/incubator-teaclave-sgx-sdk
++ to install sgx-sdk
+## mysql database
++ install mysql-server 
++ create a database, then import schema.sql into your database
+## enterprise email account
++ you will need an email account to send notification mail to users when they register
 # build
 + download baidu sgx-sdk with the name incubator-teaclave-sgx-sdk
 + copy the code into incubator-teaclave-sgx-sdk/samplecode
