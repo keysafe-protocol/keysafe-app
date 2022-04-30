@@ -7,6 +7,7 @@ use std::str;
 use std::ffi::CStr;
 
 use actix_web::{web, App, HttpServer};
+use actix_cors::Cors;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as afs;
 
@@ -121,7 +122,9 @@ async fn main() -> std::io::Result<()> {
 
     let server_url = format!("0.0.0.0:{}", conf.get("node_api_port").unwrap());
     HttpServer::new(move || {
+        let cors = Cors::permissive();
         App::new()
+            .wrap(cors)
             .app_data(web::Data::clone(&edata))
             .app_data(web::Data::clone(&ustate))
             .service(endpoint::exchange_key)

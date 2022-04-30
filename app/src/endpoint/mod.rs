@@ -55,6 +55,9 @@ fn gen_random() -> i32 {
     rng.gen_range(1000..9999)
 }
 
+static SUCC: &'static str = "success";
+static FAIL: &'static str = "fail";
+
 #[post("/exchange_key")]
 pub async fn exchange_key(
     ex_key_req: web::Json<ExchangeKeyReq>,
@@ -108,7 +111,7 @@ pub async fn auth(
     sendmail(&auth_req.account, &result.to_string(), &endex.conf);
     let mut states = user_state.state.lock().unwrap();
     states.insert(auth_req.account.clone(), result.to_string());
-    HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
 }
 
 #[derive(Deserialize)]
@@ -130,15 +133,15 @@ pub async fn auth_confirm(
     match states.get(&confirm_req.account) {
         Some(v) => {
             if v == &confirm_req.cipher_code {
-                HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+                HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
             } else {
                 states.remove(&confirm_req.account); 
-                HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+                HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
             }
         },
         None => { 
             states.remove(&confirm_req.account); 
-            HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
 }
@@ -164,7 +167,7 @@ pub async fn info(
 ) -> HttpResponse {
     // to prevent sql injection 
     if base_req.account.contains("'") {
-        return HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()});
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
     let stmt = format!(
         "select * from user_secret where kid = '{}'", 
@@ -195,7 +198,7 @@ pub async fn info(
             });
         }
     }
-    HttpResponse::Ok().json(InfoResp {status: "SUCCESS".to_string(), data: v})
+    HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
 
 #[derive(Deserialize)]
@@ -217,9 +220,9 @@ pub async fn register_mail_auth(
         let result = gen_random();
         states.insert(reg_mail_auth_req.account.clone(), result.to_string());
         sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
-        HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})    
+        HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})    
     } else {
-        HttpResponse::Ok().json(BaseResp {status: "FAIL".to_string()})
+        HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
     }
 }
 
@@ -269,13 +272,13 @@ pub async fn register_mail(
                         tee_cond_size: 256    
                     }
                 );
-                HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+                HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
             } else {
-                HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+                HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
             }
         },
         None => { 
-            HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
 }
@@ -306,10 +309,10 @@ pub async fn register_password(
                     tee_cond_size: 256    
                 }
             );
-            HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
         },
         None => { 
-            HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
 }
@@ -330,10 +333,10 @@ pub async fn register_gauth(
     let mut states = user_state.state.lock().unwrap();
     match states.get(&register_gauth_req.account) {
         Some(v) => {
-            HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
         },
         None => { 
-            HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
 }
@@ -359,7 +362,7 @@ pub async fn delegate(
         &delegate_req.chain,
         &delegate_req.chain_addr
     );
-    HttpResponse::Ok().json(BaseResp {status: "SUCCESS".to_string()})
+    HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
 #[derive(Deserialize)]
@@ -393,10 +396,10 @@ pub async fn seal(
                     delegate_id: "".to_string()
                 }
             );
-            HttpResponse::Ok().json(BaseResp{status: "SUCCESS".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
         },
         None => { 
-            HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
 }
@@ -427,7 +430,7 @@ pub async fn unseal(
     // get condition value from db sealed
     let mut states = user_state.state.lock().unwrap();
     if !states.contains_key(&unseal_req.account) {
-        return HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()});
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
     // get condition
     let cond_stmt = format!(
@@ -439,7 +442,7 @@ pub async fn unseal(
     );
     if uconds.is_empty() {
         println!("not found any user {} cond {}.", &unseal_req.account, &unseal_req.cond_type);
-        return HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()});
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
 
     // verify condition, if fail, return 
@@ -449,16 +452,16 @@ pub async fn unseal(
         match states.get(&unseal_req.account) {
             Some(v) => {
                 if v != &unseal_req.cipher_cond_value {
-                    return HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+                    return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
                 }
             },
             None => { 
-                return HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+                return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
             }
         }
     } else if &unseal_req.cond_type == "password" {
         if unseal_req.cipher_cond_value != cond_value {
-            return HttpResponse::Ok().json(BaseResp{status: "FAILED".to_string()})
+            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     } else if &unseal_req.cond_type == "gauth" {
     }
@@ -470,11 +473,11 @@ pub async fn unseal(
     let usecrets = persistence::query_user_secret(
         &endex.db_pool, secret_stmt);
     if usecrets.is_empty() {
-        return HttpResponse::Ok().json(BaseResp{status: "FAIL".to_string()});
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
     let secret_value = usecrets[0].tee_secret.clone();
     HttpResponse::Ok().json(UnsealResp{
-        status: "SUCCESS".to_string(),
+        status: SUCC.to_string(),
         cipher_secret: secret_value
     })
 }  
