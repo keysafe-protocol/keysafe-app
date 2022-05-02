@@ -40,6 +40,9 @@ make -f MakeHwFile
 + cd bin
 + cp ../app/conf.toml .
 + add your db config, email config all in this file.
+```
+node_api_port = 12345 # this is for your app port, might require sudo when this port is less than 1024
+```
 + when env = dev, sendmail will not happen.
 + copy your certificate files in certs.
 + ./app
