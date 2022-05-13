@@ -6,13 +6,14 @@ extern crate log4rs;
 use std::str;
 use std::ffi::CStr;
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{dev::Service as _, web, App, HttpResponse, HttpRequest, HttpServer, middleware};
 use actix_cors::Cors;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as afs;
+use futures_util::future::FutureExt;
 
 use log::{error, info, warn};
-
+use actix_web::error::ErrorUnauthorized;
 extern crate sgx_types;
 extern crate sgx_urts;
 use sgx_types::*;
@@ -24,6 +25,7 @@ mod ecall;
 mod endpoint;
 mod persistence;
 
+use endpoint::service::*;
 use config::Config;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -106,12 +108,12 @@ async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     println!("logging!");
     let conf = load_conf("conf");
-    let edata: web::Data<endpoint::AppState> = web::Data::new(endpoint::AppState{
+    let edata: web::Data<AppState> = web::Data::new(AppState{
         enclave: init_enclave_and_genkey(),
         db_pool: init_db_pool(&conf),
         conf: conf.clone()
     });
-    let ustate: web::Data<endpoint::UserState> = web::Data::new(endpoint::UserState{
+    let ustate: web::Data<UserState> = web::Data::new(UserState{
         state: Arc::new(Mutex::new(HashMap::new()))
     });
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -125,23 +127,25 @@ async fn main() -> std::io::Result<()> {
         let cors = Cors::permissive();
         App::new()
             .wrap(cors)
+            .wrap(endpoint::middleware::VerifyToken) 
+            .wrap(middleware::Logger::default())
             .app_data(web::Data::clone(&edata))
             .app_data(web::Data::clone(&ustate))
-            .service(endpoint::exchange_key)
-            .service(endpoint::auth)
-            .service(endpoint::auth_confirm)
-            .service(endpoint::info)
-            .service(endpoint::register_mail_auth)
-            .service(endpoint::register_mail)
-            .service(endpoint::register_gauth)
-            .service(endpoint::register_password)
-            .service(endpoint::seal)
-            .service(endpoint::unseal)
-            .service(endpoint::delegate)
+            .service(exchange_key)
+            .service(auth)
+            .service(auth_confirm)
+            .service(info)
+            .service(register_mail_auth)
+            .service(register_mail)
+            .service(register_gauth)
+            .service(register_password)
+            .service(seal)
+            .service(unseal)
+            .service(delegate)
             // .service(endpoint::notify_user)
             // .service(endpoint::prove_user)
             // .service(endpoint::prove_code)
-            .service(endpoint::hello)
+            .service(hello)
             // .service(endpoint::require_secret)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })

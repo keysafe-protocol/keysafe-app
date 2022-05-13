@@ -24,12 +24,13 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 hex = "=0.4.3"
 log = "0.4"
-log4rs = "=1.0.0"
+log4rs = "=1.1.1"
 walkdir = "2"
 glob = "0.3.0"
 mysql = "*"
 config = "0.13.1"
 rand = "0.8.5"
+jsonwebtoken = "8"
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }
