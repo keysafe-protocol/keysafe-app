@@ -45,6 +45,14 @@ pub fn insert_user_secret(pool: &Pool, usecret: UserSecret) {
     tx.commit().unwrap();
 }
 
+pub fn delete_user_secret(pool: &Pool, usecret: UserSecret) {
+    let mut conn = pool.get_conn().unwrap();
+    let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
+    tx.exec_drop("delete from user_secret where kid = ? and chain = ? and chain_addr = ?",
+        (usecret.kid.clone(), usecret.chain.clone(), usecret.chain_addr.clone())).unwrap();
+    tx.commit().unwrap();
+}
+
 pub fn update_delegate(pool: &Pool, delegate_id: &String, kid: &String, chain: &String, chain_addr: &String) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
@@ -93,57 +101,3 @@ pub fn query_user_secret(pool: &Pool, stmt: String) -> Vec<UserSecret> {
     result
 }
 
-pub fn remove_previous_file(fname: &str) {
-    let mut pat = String::new();
-    pat.push_str(fname);
-    pat.push_str(".*");
-    for entry in glob(&pat).expect("Failed to find sealed file") {
-        match entry {
-            Ok(path) => {
-                fs::remove_file(path).expect("Failed to remote file");
-            },
-            Err(e) => {
-                println!("No previous file found {}", fname);
-            }
-        }
-    }
-}
-
-pub fn write_file(fname: &str, val: Vec<u8>, n: usize) {
-    println!("sealing: saving to file {}", fname);
-    let file = File::create(fname);
-    match file {
-        Ok(mut f) => { 
-            f.write_all(&val[0..n]);
-            println!("successfully written to file");
-        },
-        Err(e) => println!("{}", e)
-    } 
-}
-
-pub fn read_file(filename: &String) -> Vec<u8> {
-    let content = fs::read(filename);
-    match content {
-        Ok(x) => x,
-        _ => panic!("read file failed.")
-    }
-}
-
-pub fn check_sealed(filename: &String) -> u32 {
-    let mut pat = String::new();
-    pat.push_str(filename);
-    pat.push_str(".*");
-    for entry in glob(&pat).expect("Failed to find sealed file") {
-        match entry {
-            Ok(path) => {
-                println!("find file {}", filename);
-                return path.extension().unwrap().to_str().unwrap().parse::<u32>().unwrap()
-            },
-            Err(e) => {
-                println!("unable to find file {}", filename);
-                return 0
-            }
-        }
-    }
-    return 0;
-}

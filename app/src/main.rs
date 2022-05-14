@@ -142,6 +142,7 @@ async fn main() -> std::io::Result<()> {
             .service(seal)
             .service(unseal)
             .service(delegate)
+            .service(delete_seal)
             // .service(endpoint::notify_user)
             // .service(endpoint::prove_user)
             // .service(endpoint::prove_code)
