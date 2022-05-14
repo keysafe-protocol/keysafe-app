@@ -3,7 +3,7 @@ extern crate openssl;
 use std::str;
 use std::time::SystemTime;
 use serde_derive::{Deserialize, Serialize};
-use actix_web::{get, post, web, HttpResponse, Responder, http::header::HeaderValue};
+use actix_web::{get, post, web, Error, HttpRequest, HttpResponse, Responder, FromRequest, http::header::HeaderValue};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use hex;
@@ -37,6 +37,11 @@ struct Claims {
     sub: String, // acount name
     exp: usize, // when to expire
 }
+
+struct AuthAccount {
+    name: String,
+}
+
 
 #[derive(Deserialize)]
 pub struct BaseReq {
@@ -441,6 +446,33 @@ pub async fn seal(
             HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
+}
+
+
+#[derive(Deserialize)]
+pub struct DeleteSealReq {
+    account: String,
+    chain: String,
+    chain_addr: String,
+}
+
+#[post("/ks/delete_seal")]
+pub async fn delete_seal(
+    delete_req: web::Json<DeleteSealReq>,
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
+) -> HttpResponse {
+    //TODO: add account verify again header
+    persistence::delete_user_secret(&endex.db_pool, persistence::UserSecret{
+        kid: delete_req.account.clone(),
+        chain: delete_req.chain.clone(),
+        chain_addr: delete_req.chain_addr.clone(),
+        cond_type: "".to_string(),
+        tee_secret: "".to_string(),
+        tee_secret_size: 0,
+        delegate_id: "".to_string()
+    });
+    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
 }
 
 #[derive(Deserialize)]
