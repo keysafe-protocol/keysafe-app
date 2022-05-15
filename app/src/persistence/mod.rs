@@ -37,8 +37,6 @@ pub fn insert_user_cond(pool: &Pool, ucond: UserCond) {
 pub fn insert_user_secret(pool: &Pool, usecret: UserSecret) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
-    tx.exec_drop("delete from user_secret where kid = ? and cond_type = ?",
-        (usecret.kid.clone(), usecret.cond_type.clone())).unwrap();
     tx.exec_drop(
         "insert into user_secret (kid, cond_type, chain, chain_addr, tee_secret, tee_secret_size) values (?, ?, ?, ?, ?, ?)",
         (usecret.kid, usecret.cond_type, usecret.chain, usecret.chain_addr, usecret.tee_secret, usecret.tee_secret_size)).unwrap();
