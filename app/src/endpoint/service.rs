@@ -435,7 +435,7 @@ pub async fn delegate(
     delegate_req: web::Json<DelegateReq>,
     endex: web::Data<AppState>
 ) -> HttpResponse {
-    let query_stmt = format!("select * from user_cond where ks_id = '{}'", delegate_req.to);
+    let query_stmt = format!("select * from user_cond where kid = '{}'", delegate_req.to);
     let query_result = persistence::query_user_cond(&endex.db_pool, query_stmt);
     if query_result.is_empty() {
         return HttpResponse::Ok().json(
