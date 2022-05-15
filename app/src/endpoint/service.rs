@@ -422,11 +422,8 @@ pub async fn register_gauth(
 #[derive(Deserialize)]
 pub struct DelegateReq {
     account: String,
-    chain: String,
-    chain_addr: String,
     to: String
 }
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DelegateResp {
     status: String,
@@ -448,9 +445,7 @@ pub async fn delegate(
     let a = persistence::update_delegate(
         &endex.db_pool,
         &delegate_req.to,
-        &delegate_req.account,
-        &delegate_req.chain,
-        &delegate_req.chain_addr
+        &delegate_req.account
     );
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
