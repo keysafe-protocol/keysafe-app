@@ -1,6 +1,7 @@
 extern crate openssl;
 #[macro_use]
 use std::str;
+use std::cmp::*;
 use std::time::SystemTime;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, Error, HttpRequest, HttpResponse, Responder, FromRequest, http::header::HeaderValue};
@@ -185,13 +186,31 @@ pub struct InfoResp {
     data: Vec<Coin>
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq)]
 pub struct Coin {
     owner: String,
     chain: String,
     chain_addr: String
 }
 //with BaseReq
+impl Ord for Coin {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (&self.owner, &self.chain, &self.chain_addr)
+        .cmp(&(&other.owner, &other.chain, &other.chain_addr))
+    }
+}
+
+impl PartialOrd for Coin {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Coin {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.owner, &self.chain, &self.chain_addr) == (&other.owner, &other.chain, &other.chain_addr)
+    }
+}
 
 #[post("/ks/info")]
 pub async fn info(
@@ -231,6 +250,8 @@ pub async fn info(
             });
         }
     }
+    v.sort();
+    v.dedup();
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
 
