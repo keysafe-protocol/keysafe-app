@@ -125,10 +125,14 @@ pub async fn auth(
 ) -> HttpResponse {
     let e = &endex.enclave;
     let result = gen_random();
-    sendmail(&auth_req.account, &result.to_string(), &endex.conf);
-    let mut states = user_state.state.lock().unwrap();
-    states.insert(auth_req.account.clone(), result.to_string());
-    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
+    let sr = sendmail(&auth_req.account, &result.to_string(), &endex.conf);
+    if sr == 0 {
+        let mut states = user_state.state.lock().unwrap();
+        states.insert(auth_req.account.clone(), result.to_string());
+        HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
+    } else {
+        HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+    }
 }
 
 #[derive(Deserialize)]
@@ -273,8 +277,12 @@ pub async fn register_mail_auth(
     if states.contains_key(&reg_mail_auth_req.account) {
         let result = gen_random();
         states.insert(reg_mail_auth_req.account.clone(), result.to_string());
-        sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
-        HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})    
+        let sr = sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
+        if sr == 0 {
+            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})    
+        } else {
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+        }
     } else {
         HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
     }
@@ -615,10 +623,14 @@ pub async fn unseal(
     })
 }  
 
-fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) {
+
+fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     if conf.get("env").unwrap() == "dev" {
         println!("send mail {} to {}", msg, account);
-        return;
+        return 0;
+    }
+    if conf.contains_key("proxy_mail") {
+        return proxy_mail(account, msg, conf);
     }
     println!("send mail {} to {}", msg, account);
     let email = Message::builder()
@@ -639,9 +651,37 @@ fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) {
 
     // Send the email
     match mailer.send(&email) {
-        Ok(_) => println!("Email sent successfully!"),
-        Err(e) => panic!("Could not send email: {:?}", e),
+        Ok(_) => { println!("Email sent successfully!"); return 0 },
+        Err(e) => { panic!("Could not send email: {:?}", e); return 1 },
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ProxyMailReq {
+    account: String,
+    msg: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ProxyMailResp {
+    status: String
+}
+
+fn proxy_mail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
+    println!("calling proxy mail {} {}", account, msg);
+    let proxy_mail_server = conf.get("proxy_mail_server").unwrap();
+    let client =  reqwest::blocking::Client::new();
+    let proxy_mail_req = ProxyMailReq {
+        account: account.to_owned(),
+        msg: msg.to_owned()
+    };
+    let res = client.post(proxy_mail_server)
+        .json(&proxy_mail_req)
+        .send().unwrap().json::<ProxyMailResp>().unwrap();
+    if res.status == SUCC {
+        return 0;
+    }
+    return 1;
 }
 
 fn system_time() -> u64 {
