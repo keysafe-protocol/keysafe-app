@@ -1,6 +1,7 @@
 extern crate openssl;
 #[macro_use]
 use std::str;
+use std::cmp::*;
 use std::time::SystemTime;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{get, post, web, Error, HttpRequest, HttpResponse, Responder, FromRequest, http::header::HeaderValue};
@@ -124,10 +125,14 @@ pub async fn auth(
 ) -> HttpResponse {
     let e = &endex.enclave;
     let result = gen_random();
-    sendmail(&auth_req.account, &result.to_string(), &endex.conf);
-    let mut states = user_state.state.lock().unwrap();
-    states.insert(auth_req.account.clone(), result.to_string());
-    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
+    let sr = sendmail(&auth_req.account, &result.to_string(), &endex.conf);
+    if sr == 0 {
+        let mut states = user_state.state.lock().unwrap();
+        states.insert(auth_req.account.clone(), result.to_string());
+        HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
+    } else {
+        HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+    }
 }
 
 #[derive(Deserialize)]
@@ -185,13 +190,31 @@ pub struct InfoResp {
     data: Vec<Coin>
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq)]
 pub struct Coin {
     owner: String,
     chain: String,
     chain_addr: String
 }
 //with BaseReq
+impl Ord for Coin {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (&self.owner, &self.chain, &self.chain_addr)
+        .cmp(&(&other.owner, &other.chain, &other.chain_addr))
+    }
+}
+
+impl PartialOrd for Coin {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Coin {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.owner, &self.chain, &self.chain_addr) == (&other.owner, &other.chain, &other.chain_addr)
+    }
+}
 
 #[post("/ks/info")]
 pub async fn info(
@@ -231,6 +254,8 @@ pub async fn info(
             });
         }
     }
+    v.sort();
+    v.dedup();
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
 
@@ -252,8 +277,12 @@ pub async fn register_mail_auth(
     if states.contains_key(&reg_mail_auth_req.account) {
         let result = gen_random();
         states.insert(reg_mail_auth_req.account.clone(), result.to_string());
-        sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
-        HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})    
+        let sr = sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
+        if sr == 0 {
+            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})    
+        } else {
+            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+        }
     } else {
         HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
     }
@@ -365,22 +394,65 @@ pub async fn register_gauth(
     let mut states = user_state.state.lock().unwrap();
     match states.get(&register_gauth_req.account) {
         Some(v) => {
-            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
         },
         None => { 
-            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
+    let mut retval = sgx_status_t::SGX_SUCCESS;
+    let sealed_size: u32 = 770;
+    let cipher_size: u32 = 256;
+    let mut sealed_gauth = vec![0; sealed_size.try_into().unwrap()];
+    let mut cipher_gauth: Vec<u8> = vec![0; cipher_size.try_into().unwrap()];
+    println!("calling gen gauth secret");
+    let result = unsafe {
+        ecall::ec_gen_gauth_secret(
+            e.geteid(), 
+            &mut retval,
+            sealed_gauth.as_mut_slice().as_mut_ptr() as * mut c_char,
+            sealed_size,
+            cipher_gauth.as_mut_slice().as_mut_ptr() as * mut c_char
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            println!("calling gen gauth success.");
+            println!("sealed_gauth {:?}", sealed_gauth);
+            println!("cipher_gauth {:?}", cipher_gauth);
+            sealed_gauth.resize(sealed_size.try_into().unwrap(), 0);
+            cipher_gauth.resize(cipher_size.try_into().unwrap(), 0);
+            let mut chars: Vec<char>= Vec::new();
+            for i in cipher_gauth {
+                if i != 0 {
+                    chars.push(i as char);
+                }
+            }
+            let hex_cipher: String = chars.into_iter().collect();
+            println!("cipher hex {:?}", hex_cipher);
+            //let hex_sealed = hex::encode(&sealed_gauth[0..sealed_size.try_into().unwrap()]);
+            // let hex_cipher = hex::encode(&cipher_gauth[0..cipher_size.try_into().unwrap()]);
+            persistence::insert_user_cond(
+                &endex.db_pool,
+                persistence::UserCond {
+                    kid: register_gauth_req.account.clone(),
+                    cond_type: "gauth".to_string(),
+                    tee_cond_value: hex_cipher[0..26].to_string(),
+                    tee_cond_size: 256
+                }
+            );
+            // println!("getting encrypted gauth secret {}", len2.to_string());
+            HttpResponse::Ok().json(RegisterGauthResp{status: SUCC.to_string(), gauth: hex_cipher})
+        },
+        _ => panic!("require GAuth secret failed!")
+    }
+
 }
 
 #[derive(Deserialize)]
 pub struct DelegateReq {
     account: String,
-    chain: String,
-    chain_addr: String,
     to: String
 }
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DelegateResp {
     status: String,
@@ -392,7 +464,7 @@ pub async fn delegate(
     delegate_req: web::Json<DelegateReq>,
     endex: web::Data<AppState>
 ) -> HttpResponse {
-    let query_stmt = format!("select * from user_cond where ks_id = '{}'", delegate_req.to);
+    let query_stmt = format!("select * from user_cond where kid = '{}'", delegate_req.to);
     let query_result = persistence::query_user_cond(&endex.db_pool, query_stmt);
     if query_result.is_empty() {
         return HttpResponse::Ok().json(
@@ -402,9 +474,7 @@ pub async fn delegate(
     let a = persistence::update_delegate(
         &endex.db_pool,
         &delegate_req.to,
-        &delegate_req.account,
-        &delegate_req.chain,
-        &delegate_req.chain_addr
+        &delegate_req.account
     );
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
@@ -553,10 +623,14 @@ pub async fn unseal(
     })
 }  
 
-fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) {
+
+fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     if conf.get("env").unwrap() == "dev" {
         println!("send mail {} to {}", msg, account);
-        return;
+        return 0;
+    }
+    if conf.contains_key("proxy_mail") {
+        return proxy_mail(account, msg, conf);
     }
     println!("send mail {} to {}", msg, account);
     let email = Message::builder()
@@ -577,9 +651,37 @@ fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) {
 
     // Send the email
     match mailer.send(&email) {
-        Ok(_) => println!("Email sent successfully!"),
-        Err(e) => panic!("Could not send email: {:?}", e),
+        Ok(_) => { println!("Email sent successfully!"); return 0 },
+        Err(e) => { panic!("Could not send email: {:?}", e); return 1 },
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ProxyMailReq {
+    account: String,
+    msg: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ProxyMailResp {
+    status: String
+}
+
+fn proxy_mail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
+    println!("calling proxy mail {} {}", account, msg);
+    let proxy_mail_server = conf.get("proxy_mail_server").unwrap();
+    let client =  reqwest::blocking::Client::new();
+    let proxy_mail_req = ProxyMailReq {
+        account: account.to_owned(),
+        msg: msg.to_owned()
+    };
+    let res = client.post(proxy_mail_server)
+        .json(&proxy_mail_req)
+        .send().unwrap().json::<ProxyMailResp>().unwrap();
+    if res.status == SUCC {
+        return 0;
+    }
+    return 1;
 }
 
 fn system_time() -> u64 {

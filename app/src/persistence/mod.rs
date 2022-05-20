@@ -37,8 +37,6 @@ pub fn insert_user_cond(pool: &Pool, ucond: UserCond) {
 pub fn insert_user_secret(pool: &Pool, usecret: UserSecret) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
-    tx.exec_drop("delete from user_secret where kid = ? and cond_type = ?",
-        (usecret.kid.clone(), usecret.cond_type.clone())).unwrap();
     tx.exec_drop(
         "insert into user_secret (kid, cond_type, chain, chain_addr, tee_secret, tee_secret_size) values (?, ?, ?, ?, ?, ?)",
         (usecret.kid, usecret.cond_type, usecret.chain, usecret.chain_addr, usecret.tee_secret, usecret.tee_secret_size)).unwrap();
@@ -53,11 +51,11 @@ pub fn delete_user_secret(pool: &Pool, usecret: UserSecret) {
     tx.commit().unwrap();
 }
 
-pub fn update_delegate(pool: &Pool, delegate_id: &String, kid: &String, chain: &String, chain_addr: &String) {
+pub fn update_delegate(pool: &Pool, delegate_id: &String, kid: &String) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
-    tx.exec_drop("update user_secret set delegate_id = ? where kid = ? and chain = ? and chain_addr = ?",
-        (delegate_id, kid, chain, chain_addr)).unwrap();
+    tx.exec_drop("update user_secret set delegate_id = ? where kid = ? ",
+        (delegate_id, kid)).unwrap();
     tx.commit().unwrap();
 }
 
