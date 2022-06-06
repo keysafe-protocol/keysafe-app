@@ -48,6 +48,7 @@ where
 
         if !request.path().starts_with("/ks/") ||
             request.path() == "/ks/auth" || 
+            request.path() == "/ks/oauth" ||
             request.path() == "/ks/auth_confirm" {
             println!("path that doesn't require token");
             let res = self.service.call(request);
