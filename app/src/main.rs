@@ -143,11 +143,8 @@ async fn main() -> std::io::Result<()> {
             .service(unseal)
             .service(delegate)
             .service(delete_seal)
-            // .service(endpoint::notify_user)
-            // .service(endpoint::prove_user)
-            // .service(endpoint::prove_code)
             .service(hello)
-            // .service(endpoint::require_secret)
+            .service(oauth)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
     .bind_openssl(server_url, builder)?

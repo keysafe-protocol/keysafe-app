@@ -21,7 +21,6 @@ use std::sync::{Arc, Mutex};
 use rand::{thread_rng, Rng};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
 
-
 pub struct AppState {
     pub enclave: SgxEnclave,
     pub db_pool: Pool,
@@ -116,14 +115,12 @@ pub struct AuthReq {
 // with BaseResp
 
 
-
 #[post("/ks/auth")]
 pub async fn auth(
     auth_req: web::Json<AuthReq>,
     endex: web::Data<AppState>,
     user_state: web::Data<UserState>
 ) -> HttpResponse {
-    let e = &endex.enclave;
     let result = gen_random();
     let sr = sendmail(&auth_req.account, &result.to_string(), &endex.conf);
     if sr == 0 {
@@ -155,33 +152,26 @@ pub async fn auth_confirm(
     endex: web::Data<AppState>,
     user_state: web::Data<UserState>
 ) -> HttpResponse {
-    let e = &endex.enclave;
     let mut states = user_state.state.lock().unwrap();
-    match states.get(&confirm_req.account) {
-        Some(v) => {
-            if v == &confirm_req.cipher_code {
-                println!("generating token with secret {}", &endex.conf["secret"]);
-                HttpResponse::Ok().json(ConfirmResp{
-                    status: SUCC.to_string(),
-                    token: encode(
-                        &Header::default(), 
-                        &Claims{
-                            sub: confirm_req.account.clone(),
-                            exp: (system_time() + 7 * 24 * 3600).try_into().unwrap()
-                        },
-                        &EncodingKey::from_secret(&endex.conf["secret"].as_bytes()),
-                    ).unwrap()
-                })
-            } else {
-                states.remove(&confirm_req.account); 
-                HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-            }
-        },
-        None => { 
-            states.remove(&confirm_req.account); 
-            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-        }
-    }
+    if let Some(v) = states.get(&confirm_req.account) {
+        // when confirm code match, return a new token for current session
+        if v == &confirm_req.cipher_code {
+            println!("generating token with secret {}", &endex.conf["secret"]);
+            return HttpResponse::Ok().json(ConfirmResp{
+                status: SUCC.to_string(),
+                token: encode(
+                    &Header::default(), 
+                    &Claims{
+                        sub: confirm_req.account.clone(),
+                        exp: (system_time() + 7 * 24 * 3600).try_into().unwrap()
+                    },
+                    &EncodingKey::from_secret(&endex.conf["secret"].as_bytes()),
+                ).unwrap()
+            });
+        } 
+    }       
+    states.remove(&confirm_req.account); 
+    HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -225,35 +215,33 @@ pub async fn info(
     if base_req.account.contains("'") {
         return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
+    let mut v = Vec::new();
     let stmt = format!(
         "select * from user_secret where kid = '{}'", 
         base_req.account
     );
     let secrets = persistence::query_user_secret(&endex.db_pool, stmt);
+    for i in &secrets {
+        v.push(Coin {
+            owner: base_req.account.clone(),
+            chain: i.chain.clone(), 
+            chain_addr: i.chain_addr.clone()
+        });
+    }
+
     let dstmt = format!(
         "select * from user_secret where delegate_id = '{}'", 
         base_req.account
     );
     let dsecrets = persistence::query_user_secret(&endex.db_pool, dstmt);
-    let mut v = Vec::new();
-    for i in secrets {
-        if i.kid == base_req.account {
-            v.push(Coin {
-                owner: base_req.account.clone(),
-                chain: i.chain.clone(), 
-                chain_addr: i.chain_addr.clone()
-            });
-        }
-    }
     for i in &dsecrets {
-        if i.delegate_id == base_req.account {
-            v.push(Coin {
-                owner: i.kid.clone(),
-                chain: i.chain.clone(), 
-                chain_addr: i.chain_addr.clone()
-            });
-        }
+        v.push(Coin {
+            owner: i.kid.clone(),
+            chain: i.chain.clone(), 
+            chain_addr: i.chain_addr.clone()
+        });
     }
+
     v.sort();
     v.dedup();
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
@@ -272,20 +260,16 @@ pub async fn register_mail_auth(
     endex: web::Data<AppState>,
     user_state: web::Data<UserState>
 ) -> HttpResponse {
-    let e = &endex.enclave;
     let mut states = user_state.state.lock().unwrap();
     if states.contains_key(&reg_mail_auth_req.account) {
         let result = gen_random();
         states.insert(reg_mail_auth_req.account.clone(), result.to_string());
         let sr = sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
         if sr == 0 {
-            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})    
-        } else {
-            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-        }
-    } else {
-        HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
+            return HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()});    
+        } 
     }
+    HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
 }
 
 #[derive(Deserialize)]
@@ -320,29 +304,22 @@ pub async fn register_mail(
     endex: web::Data<AppState>,
     user_state: web::Data<UserState>
 ) -> HttpResponse {
-    let e = &endex.enclave;
     let mut states = user_state.state.lock().unwrap();
-    match states.get(&register_mail_req.account) {
-        Some(v) => {
-            if v == &register_mail_req.cipher_code {
-                persistence::insert_user_cond(
-                    &endex.db_pool, 
-                    persistence::UserCond {
-                        kid: register_mail_req.account.clone(),
-                        cond_type: "email".to_string(),
-                        tee_cond_value: register_mail_req.mail.clone(),
-                        tee_cond_size: 256    
-                    }
-                );
-                HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
-            } else {
-                HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-            }
-        },
-        None => { 
-            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-        }
-    }
+    if let Some(v) = states.get(&register_mail_req.account) {
+        if v == &register_mail_req.cipher_code {
+            persistence::insert_user_cond(
+                &endex.db_pool, 
+                persistence::UserCond {
+                    kid: register_mail_req.account.clone(),
+                    cond_type: "email".to_string(),
+                    tee_cond_value: register_mail_req.mail.clone(),
+                    tee_cond_size: 256    
+                }
+            );
+            return HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()});
+        } 
+    }   
+    HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
 }
 
 #[derive(Deserialize)]
@@ -357,25 +334,16 @@ pub async fn register_password(
     endex: web::Data<AppState>,
     user_state: web::Data<UserState>
 ) -> HttpResponse {
-    let e = &endex.enclave;
-    let mut states = user_state.state.lock().unwrap();
-    match states.get(&register_password_req.account) {
-        Some(v) => {
-            persistence::insert_user_cond(
-                &endex.db_pool, 
-                persistence::UserCond {
-                    kid: register_password_req.account.clone(),
-                    cond_type: "password".to_string(),
-                    tee_cond_value: register_password_req.cipher_code.clone(),
-                    tee_cond_size: 256    
-                }
-            );
-            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
-        },
-        None => { 
-            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+    persistence::insert_user_cond(
+        &endex.db_pool, 
+        persistence::UserCond {
+            kid: register_password_req.account.clone(),
+            cond_type: "password".to_string(),
+            tee_cond_value: register_password_req.cipher_code.clone(),
+            tee_cond_size: 256    
         }
-    }
+    );
+    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -391,14 +359,6 @@ pub async fn register_gauth(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let e = &endex.enclave;
-    let mut states = user_state.state.lock().unwrap();
-    match states.get(&register_gauth_req.account) {
-        Some(v) => {
-        },
-        None => { 
-            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-        }
-    }
     let mut retval = sgx_status_t::SGX_SUCCESS;
     let sealed_size: u32 = 770;
     let cipher_size: u32 = 256;
@@ -445,7 +405,6 @@ pub async fn register_gauth(
         },
         _ => panic!("require GAuth secret failed!")
     }
-
 }
 
 #[derive(Deserialize)]
@@ -494,28 +453,19 @@ pub async fn seal(
     endex: web::Data<AppState>,
     user_state: web::Data<UserState>
 ) -> HttpResponse {
-    let e = &endex.enclave;
-    let mut states = user_state.state.lock().unwrap();
-    match states.get(&seal_req.account) {
-        Some(v) => {
-            persistence::insert_user_secret(
-                &endex.db_pool, 
-                persistence::UserSecret {
-                    kid: seal_req.account.clone(),
-                    cond_type: seal_req.cond_type.clone(),
-                    chain: seal_req.chain.clone(),
-                    chain_addr: seal_req.chain_addr.clone(),
-                    tee_secret: seal_req.cipher_secret.clone(),
-                    tee_secret_size: 256,
-                    delegate_id: "".to_string()
-                }
-            );
-            HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
-        },
-        None => { 
-            HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+    persistence::insert_user_secret(
+        &endex.db_pool, 
+        persistence::UserSecret {
+            kid: seal_req.account.clone(),
+            cond_type: seal_req.cond_type.clone(),
+            chain: seal_req.chain.clone(),
+            chain_addr: seal_req.chain_addr.clone(),
+            tee_secret: seal_req.cipher_secret.clone(),
+            tee_secret_size: 256,
+            delegate_id: "".to_string()
         }
-    }
+    );
+    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
 }
 
 
@@ -568,6 +518,7 @@ pub async fn unseal(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let e = &endex.enclave;
+    let systime = system_time();
     // get condition value from db sealed
     let mut states = user_state.state.lock().unwrap();
     if !states.contains_key(&unseal_req.account) {
@@ -590,21 +541,36 @@ pub async fn unseal(
     let cond_value = uconds[0].tee_cond_value.clone();
 
     if &unseal_req.cond_type == "email" {
-        match states.get(&unseal_req.account) {
-            Some(v) => {
-                if v != &unseal_req.cipher_cond_value {
-                    return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
-                }
-            },
-            None => { 
+        if let Some(v) = states.get(&unseal_req.account) {
+            if v != &unseal_req.cipher_cond_value {
                 return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
             }
+        } else { 
+            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     } else if &unseal_req.cond_type == "password" {
         if unseal_req.cipher_cond_value != cond_value {
             return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     } else if &unseal_req.cond_type == "gauth" {
+        //let sealed_gauth = hex::decode(cond_value).expect("Decode failed.");
+        let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+        println!("gauth {} with code {}", cond_value, unseal_req.cipher_cond_value.parse::<i32>().unwrap());
+        let result = unsafe {
+            ecall::ec_verify_gauth_code(
+                e.geteid(),
+                &mut sgx_result,
+                unseal_req.cipher_cond_value.parse::<i32>().unwrap(),
+                cond_value.as_ptr() as * const c_char,
+                systime
+            )
+        };
+        println!("sgx result return {}", result);
+        println!("sgx result in arg {}", sgx_result);
+        match sgx_result {
+            sgx_status_t::SGX_SUCCESS => {},
+            _ => return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+        }
     }
     // return sealed secret when pass verify
     let secret_stmt = format!(
@@ -623,6 +589,66 @@ pub async fn unseal(
     })
 }  
 
+#[derive(Deserialize)]
+pub struct OAuthReq {
+    account: String,
+    code: String
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthResp {
+    profile: String
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct GithubOAuthReq {
+    client_id: String,
+    client_secret: String,
+    code: String
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct GithubOAuthResp {
+    access_token: String,
+    scope: String,
+    token_type: String
+}
+
+#[post("/ks/oauth")]
+pub async fn oauth(
+    oauth_req: web::Json<OAuthReq>,
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
+) -> HttpResponse {
+    let conf = &endex.conf;
+    let client_id = conf.get("github_client_id").unwrap();
+    let client_secret = conf.get("github_client_secret").unwrap();
+    let oauth_result = github_oauth(client_id.clone(), client_secret.clone(), oauth_req.code.clone());
+    HttpResponse::Ok().json(OAuthResp{
+        profile: oauth_result
+    })
+}
+
+fn github_oauth(
+    client_id: String,
+    client_secret: String,
+    code: String
+) -> String {
+    let http_client = reqwest::blocking::Client::new();
+    let github_oauth_req = GithubOAuthReq {
+        client_id: client_id,
+        client_secret: client_secret,
+        code: code
+    };
+    let res = http_client.post("https://github.com/login/oauth/access_token")
+        .json(&github_oauth_req)
+        .header("Accept", "application/json")
+        .send().unwrap().json::<GithubOAuthResp>().unwrap();
+    let access_token = res.access_token;
+    return http_client.post("https://api.github.com/user")
+        .header("Authorization", format!("token {}", access_token))
+        .send().unwrap().text().unwrap();
+}
 
 fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     if conf.get("env").unwrap() == "dev" {
@@ -652,7 +678,7 @@ fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     // Send the email
     match mailer.send(&email) {
         Ok(_) => { println!("Email sent successfully!"); return 0 },
-        Err(e) => { panic!("Could not send email: {:?}", e); return 1 },
+        Err(e) => { println!("Could not send email: {:?}", e); return 1 },
     }
 }
 
@@ -692,25 +718,22 @@ fn system_time() -> u64 {
 }
 
 pub fn verify_token(token_option: Option<&HeaderValue>, secret: &str) -> bool {
-    match token_option {
-        Some(v) => {
-            println!("analysing header {}", v.to_str().unwrap());
-            println!("decode with secret {}", secret);
-            let mut validation = Validation::new(Algorithm::HS256);
-            let token = v.to_str().unwrap();
-            let token_data = decode::<Claims>(&token, &DecodingKey::from_secret(secret.as_ref()), &validation);
-            match token_data {
-                Ok(c) => true,
-                _ => {
-                    println!("token verify failed");
-                    false 
-                }
+    if let Some(v) = token_option {
+        println!("analysing header {}", v.to_str().unwrap());
+        println!("decode with secret {}", secret);
+        let mut validation = Validation::new(Algorithm::HS256);
+        let token = v.to_str().unwrap();
+        let token_data = decode::<Claims>(&token, &DecodingKey::from_secret(secret.as_ref()), &validation);
+        match token_data {
+            Ok(c) => true,
+            _ => {
+                println!("token verify failed");
+                false 
             }
-        },
-        _ => {
-            println!("extract token from header failed");
-            return false;
         }
+    } else {
+        println!("extract token from header failed");
+        false
     }
 }
 
