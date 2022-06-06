@@ -589,7 +589,7 @@ pub async fn unseal(
     })
 }  
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct OAuthReq {
     account: String,
     code: String
@@ -600,14 +600,14 @@ pub struct OAuthResp {
     profile: String
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct GithubOAuthReq {
     client_id: String,
     client_secret: String,
     code: String
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct GithubOAuthResp {
     access_token: String,
     scope: String,
@@ -621,6 +621,7 @@ pub async fn oauth(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let conf = &endex.conf;
+    println!("oath request with code {}", &oauth_req.code);
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(client_id.clone(), client_secret.clone(), oauth_req.code.clone());
@@ -644,6 +645,7 @@ fn github_oauth(
         .json(&github_oauth_req)
         .header("Accept", "application/json")
         .send().unwrap().json::<GithubOAuthResp>().unwrap();
+    println!("github get access token {}", &res.access_token);
     let access_token = res.access_token;
     return http_client.post("https://api.github.com/user")
         .header("Authorization", format!("token {}", access_token))
