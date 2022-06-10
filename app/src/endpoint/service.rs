@@ -247,6 +247,36 @@ pub async fn info(
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InfoOAuthResp {
+    status: String,
+    data: Vec<String>
+}
+
+#[post("/ks/info_oauth")]
+pub async fn info_oauth(
+    base_req: web::Json<BaseReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    // to prevent sql injection 
+    if base_req.account.contains("'") {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    let mut v = Vec::new();
+    let stmt = format!(
+        "select * from user_cond where kid = '{}' and cond_type like '%oauth%'", 
+        base_req.account
+    );
+    let conds = persistence::query_user_cond(&endex.db_pool, stmt);
+    for i in &conds {
+        v.push(i.cond_type.clone());
+    }
+    v.sort();
+    v.dedup();
+    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: v})
+}
+
+
 #[derive(Deserialize)]
 pub struct RegisterMailAuthReq {
     account: String,
@@ -345,6 +375,30 @@ pub async fn register_password(
     );
     HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
 }
+
+#[post("/ks/register_oauth_github")]
+pub async fn register_oauth_github(
+    register_oauth_req: web::Json<OAuthReq>,
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
+) -> HttpResponse {
+    let conf = &endex.conf;
+    let client_id = conf.get("github_client_id").unwrap();
+    let client_secret = conf.get("github_client_secret").unwrap();
+    let oauth_result = github_oauth(
+        client_id.clone(), client_secret.clone(), register_oauth_req.code.clone());
+    persistence::insert_user_cond(
+        &endex.db_pool, 
+        persistence::UserCond {
+            kid: register_oauth_req.account.clone(),
+            cond_type: "oauth@github".to_string(),
+            tee_cond_value: oauth_result,
+            tee_cond_size: 256    
+        }
+    );
+    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegisterGauthResp {
@@ -518,6 +572,7 @@ pub async fn unseal(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let e = &endex.enclave;
+    let conf = &endex.conf;
     let systime = system_time();
     // get condition value from db sealed
     let mut states = user_state.state.lock().unwrap();
@@ -536,7 +591,6 @@ pub async fn unseal(
         println!("not found any user {} cond {}.", &unseal_req.account, &unseal_req.cond_type);
         return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
-
     // verify condition, if fail, return 
     let cond_value = uconds[0].tee_cond_value.clone();
 
@@ -570,6 +624,14 @@ pub async fn unseal(
         match sgx_result {
             sgx_status_t::SGX_SUCCESS => {},
             _ => return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+        }
+    } else if &unseal_req.cond_type == "oauth@github" {
+        let client_id = conf.get("github_client_id").unwrap();
+        let client_secret = conf.get("github_client_secret").unwrap();
+        let oauth_result = github_oauth(
+            client_id.clone(), client_secret.clone(), unseal_req.cipher_cond_value.clone());
+        if oauth_result != cond_value {
+            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
     // return sealed secret when pass verify
