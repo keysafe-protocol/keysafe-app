@@ -706,9 +706,11 @@ fn github_oauth(
     let res = http_client.post("https://github.com/login/oauth/access_token")
         .json(&github_oauth_req)
         .header("Accept", "application/json")
-        .send().unwrap().json::<GithubOAuthResp>().unwrap();
-    println!("github get access token {}", &res.access_token);
-    let access_token = res.access_token;
+        .send().unwrap();
+    println!("access token response is {:?}", res);
+    // println!("github get access token {}", &res.access_token);
+    // let access_token = res.access_token;
+    let access_token = "123";
     return http_client.post("https://api.github.com/user")
         .header("Authorization", format!("token {}", access_token))
         .send().unwrap().text().unwrap();
