@@ -707,11 +707,11 @@ fn github_oauth(
         .json(&github_oauth_req)
         .header("Accept", "application/json")
         .header("User-Agent", "keysafe-protocol")
-        .send().unwrap().text().unwrap();
+        .send().unwrap().json::<GithubOAuthResp>().unwrap();
     println!("access token response is {:?}", res);
     // println!("github get access token {}", &res.access_token);
-    // let access_token = res.access_token;
-    let access_token = "123";
+    let access_token = res.access_token;
+    // let access_token = "123";
     return http_client.post("https://api.github.com/user")
         .header("Authorization", format!("token {}", access_token))
         .header("User-Agent", "keysafe-protocol")
