@@ -14,6 +14,7 @@ extern crate sgx_urts;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
 use mysql::*;
+use serde_json::{Value, Map};
 use crate::ecall;
 use crate::persistence;
 use std::collections::HashMap;
@@ -387,16 +388,17 @@ pub async fn register_oauth_github(
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(
         client_id.clone(), client_secret.clone(), register_oauth_req.code.clone());
+    let email = parse_oauth_profile(oauth_result.clone());
     persistence::insert_user_cond(
         &endex.db_pool, 
         persistence::UserCond {
             kid: register_oauth_req.account.clone(),
             cond_type: "oauth@github".to_string(),
-            tee_cond_value: oauth_result,
+            tee_cond_value: email,
             tee_cond_size: 256    
         }
     );
-    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
+    return HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()});
 }
 
 
@@ -630,7 +632,8 @@ pub async fn unseal(
         let client_secret = conf.get("github_client_secret").unwrap();
         let oauth_result = github_oauth(
             client_id.clone(), client_secret.clone(), unseal_req.cipher_cond_value.clone());
-        if oauth_result != cond_value {
+        let email = parse_oauth_profile(oauth_result.clone());
+        if email != cond_value {
             return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
@@ -716,6 +719,15 @@ fn github_oauth(
         .header("Authorization", format!("token {}", access_token))
         .header("User-Agent", "keysafe-protocol")
         .send().unwrap().text().unwrap();
+}
+
+fn parse_oauth_profile(oauth_result: String) -> String {
+    let parsed: Value = serde_json::from_str(&oauth_result).unwrap(); 
+    let obj: Map<String, Value> = parsed.as_object().unwrap().clone();
+    let profile: Value = obj.get("profile").unwrap().clone();
+    let pobj: Map<String, Value> = profile.as_object().unwrap().clone();
+    let email: String = profile.clone().get("email").unwrap().as_str().unwrap().to_string();
+    email
 }
 
 fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
