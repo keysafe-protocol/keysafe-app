@@ -37,6 +37,6 @@ create table user_secret (
     tee_secret_size int default 0,
     INDEX uid using hash(kid),
     INDEX did using hash(delegate_id),
-    PRIMARY KEY(kid, cond_type)
+    PRIMARY KEY(kid, cond_type, chain, chain_addr)
 );
 
