@@ -292,14 +292,12 @@ pub async fn register_mail_auth(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let mut states = user_state.state.lock().unwrap();
-    if states.contains_key(&reg_mail_auth_req.account) {
-        let result = gen_random();
-        states.insert(reg_mail_auth_req.account.clone(), result.to_string());
-        let sr = sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
-        if sr == 0 {
-            return HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()});    
-        } 
-    }
+    let result = gen_random();
+    states.insert(reg_mail_auth_req.account.clone(), result.to_string());
+    let sr = sendmail(&reg_mail_auth_req.mail, &result.to_string(), &endex.conf);
+    if sr == 0 {
+        return HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()});    
+    } 
     HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
 }
 
@@ -577,10 +575,7 @@ pub async fn unseal(
     let conf = &endex.conf;
     let systime = system_time();
     // get condition value from db sealed
-    let mut states = user_state.state.lock().unwrap();
-    if !states.contains_key(&unseal_req.account) {
-        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
-    }
+
     // get condition
     let cond_stmt = format!(
         "select * from user_cond where kid='{}' and cond_type='{}'",
@@ -597,6 +592,10 @@ pub async fn unseal(
     let cond_value = uconds[0].tee_cond_value.clone();
 
     if &unseal_req.cond_type == "email" {
+        let mut states = user_state.state.lock().unwrap();
+        if !states.contains_key(&unseal_req.account) {
+            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+        }
         if let Some(v) = states.get(&unseal_req.account) {
             if v != &unseal_req.cipher_cond_value {
                 return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
