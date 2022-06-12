@@ -724,6 +724,7 @@ fn github_oauth(
 fn parse_oauth_profile(oauth_result: String) -> String {
     let parsed: Value = serde_json::from_str(&oauth_result).unwrap(); 
     let obj: Map<String, Value> = parsed.as_object().unwrap().clone();
+    println!("access obj {:?}", obj);
     let profile: Value = obj.get("profile").unwrap().clone();
     let pobj: Map<String, Value> = profile.as_object().unwrap().clone();
     let email: String = profile.clone().get("email").unwrap().as_str().unwrap().to_string();
