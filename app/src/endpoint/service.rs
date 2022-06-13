@@ -4,7 +4,10 @@ use std::str;
 use std::cmp::*;
 use std::time::SystemTime;
 use serde_derive::{Deserialize, Serialize};
-use actix_web::{get, post, web, Error, HttpRequest, HttpResponse, Responder, FromRequest, http::header::HeaderValue};
+use actix_web::{
+    get, post, web, Error, HttpRequest, HttpResponse, 
+    Responder, FromRequest, http::header::HeaderValue, 
+    http::header::TryIntoHeaderValue, http::header::InvalidHeaderValue};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use hex;
@@ -42,7 +45,6 @@ struct Claims {
 struct AuthAccount {
     name: String,
 }
-
 
 #[derive(Deserialize)]
 pub struct BaseReq {
@@ -210,7 +212,7 @@ impl PartialEq for Coin {
 #[post("/ks/info")]
 pub async fn info(
     base_req: web::Json<BaseReq>,
-    endex: web::Data<AppState>
+    endex: web::Data<AppState>,
 ) -> HttpResponse {
     // to prevent sql injection 
     if base_req.account.contains("'") {
@@ -248,10 +250,11 @@ pub async fn info(
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
 
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoOAuthResp {
     status: String,
-    data: Vec<String>
+    data: Vec<persistence::UserOAuth>
 }
 
 #[post("/ks/info_oauth")]
@@ -263,20 +266,13 @@ pub async fn info_oauth(
     if base_req.account.contains("'") {
         return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
-    let mut v = Vec::new();
     let stmt = format!(
-        "select * from user_cond where kid = '{}' and cond_type like '%oauth%'", 
+        "select * from user_oauth where kid = '{}'", 
         base_req.account
     );
-    let conds = persistence::query_user_cond(&endex.db_pool, stmt);
-    for i in &conds {
-        v.push(i.cond_type.clone());
-    }
-    v.sort();
-    v.dedup();
-    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: v})
+    let oauths = persistence::query_user_oauth(&endex.db_pool, stmt);
+    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
 }
-
 
 #[derive(Deserialize)]
 pub struct RegisterMailAuthReq {
@@ -656,6 +652,7 @@ pub async fn unseal(
 #[derive(Deserialize, Debug)]
 pub struct OAuthReq {
     account: String,
+    org: String,
     code: String
 }
 
@@ -689,6 +686,15 @@ pub async fn oauth(
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(client_id.clone(), client_secret.clone(), oauth_req.code.clone());
+    persistence::insert_user_oauth(
+        &endex.db_pool, 
+        persistence::UserOAuth {
+            kid: oauth_req.account.clone(),
+            org: oauth_req.org.to_string(),
+            tee_profile: oauth_result.to_string(),
+            tee_profile_size: 256
+        }
+    );
     HttpResponse::Ok().json(OAuthResp{
         profile: oauth_result
     })

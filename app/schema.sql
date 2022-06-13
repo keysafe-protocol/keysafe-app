@@ -40,3 +40,11 @@ create table user_secret (
     PRIMARY KEY(kid, cond_type, chain, chain_addr)
 );
 
+drop table if exists user_oauth;
+create table user_oauth (
+    kid varchar(40) not null,
+    org varchar(20) default '' not null,
+    tee_profile varchar(3000) default '' not null,
+    tee_profile_size int default 0,
+    PRIMARY KEY(kid, cond_type)
+);

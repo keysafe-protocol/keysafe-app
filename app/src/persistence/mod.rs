@@ -6,12 +6,21 @@ use std::fs;
 
 use glob::glob;
 use std::io::Write;
+use serde_derive::{Deserialize, Serialize};
 
 pub struct UserCond {
     pub kid: String,
     pub cond_type: String,
     pub tee_cond_value: String,
     pub tee_cond_size: i32
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserOAuth {
+    pub kid: String,
+    pub org: String,
+    pub tee_profile: String,
+    pub tee_profile_size: i32
 }
 
 pub struct UserSecret {
@@ -31,6 +40,16 @@ pub fn insert_user_cond(pool: &Pool, ucond: UserCond) {
         (ucond.kid.clone(), ucond.cond_type.clone())).unwrap();
     tx.exec_drop("insert into user_cond (kid, cond_type, tee_cond_value, tee_cond_size) values (?, ?, ?, ?)",
         (ucond.kid, ucond.cond_type, ucond.tee_cond_value, ucond.tee_cond_size)).unwrap();
+    tx.commit().unwrap();
+}
+
+pub fn insert_user_oauth(pool: &Pool, oauth: UserOAuth) {
+    let mut conn = pool.get_conn().unwrap();
+    let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
+    tx.exec_drop("delete from user_oauth where kid = ? and org = ?",
+        (oauth.kid.clone(), oauth.org.clone())).unwrap();
+    tx.exec_drop("insert into user_oauth (kid, org, tee_profile, tee_profile_size) values (?, ?, ?, ?)",
+        (oauth.kid, oauth.org, oauth.tee_profile, oauth.tee_profile_size)).unwrap();
     tx.commit().unwrap();
 }
 
@@ -57,6 +76,22 @@ pub fn update_delegate(pool: &Pool, delegate_id: &String, kid: &String) {
     tx.exec_drop("update user_secret set delegate_id = ? where kid = ? ",
         (delegate_id, kid)).unwrap();
     tx.commit().unwrap();
+}
+
+pub fn query_user_oauth(pool: &Pool, stmt: String) -> Vec<UserOAuth>{
+    let mut conn = pool.get_conn().unwrap();
+    let mut result: Vec<UserOAuth> = Vec::new();
+    conn.query_iter(stmt).unwrap().for_each(|row| {
+        let r:(std::string::String, std::string::String, 
+            std::string::String, i32) = from_row(row.unwrap());
+        result.push(UserOAuth {
+            kid: r.0,
+            org: r.1,
+            tee_profile: r.2,
+            tee_profile_size: r.3
+        });
+    });
+    result
 }
 
 pub fn query_user_cond(pool: &Pool, stmt: String) -> Vec<UserCond>{
