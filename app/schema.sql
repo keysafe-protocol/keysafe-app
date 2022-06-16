@@ -46,5 +46,5 @@ create table user_oauth (
     org varchar(20) default '' not null,
     tee_profile varchar(3000) default '' not null,
     tee_profile_size int default 0,
-    PRIMARY KEY(kid, cond_type)
+    PRIMARY KEY(kid, org)
 );
