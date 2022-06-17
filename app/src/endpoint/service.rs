@@ -589,14 +589,13 @@ pub async fn unseal(
 
     if &unseal_req.cond_type == "email" {
         let mut states = user_state.state.lock().unwrap();
-        if !states.contains_key(&unseal_req.account) {
-            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
-        }
         if let Some(v) = states.get(&unseal_req.account) {
             if v != &unseal_req.cipher_cond_value {
+                println!("cipher code does not match");
                 return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
             }
-        } else { 
+        } else {
+            println!("state does not contain user account");
             return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     } else if &unseal_req.cond_type == "password" {
