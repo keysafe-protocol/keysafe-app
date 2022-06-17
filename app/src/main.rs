@@ -147,6 +147,7 @@ async fn main() -> std::io::Result<()> {
             .service(delete_seal)
             .service(hello)
             .service(oauth)
+            .service(web3_cond)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
     .bind_openssl(server_url, builder)?
