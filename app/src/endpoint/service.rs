@@ -274,6 +274,27 @@ pub async fn info_oauth(
     HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Web3CondResp {
+    status: String,
+    data: Vec<String>
+}
+
+#[post("/ks/web3/cond")]
+pub async fn web3_cond(
+    base_req: web::Json<BaseReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    let query_stmt = format!("select * from user_cond where kid = '{}'", base_req.account);
+    let user_conds = persistence::query_user_cond(&endex.db_pool, query_stmt);
+    let mut v = Vec::new();
+    for i in &user_conds {
+        v.push(i.cond_type.clone());
+    }
+    HttpResponse::Ok().json(Web3CondResp {status: SUCC.to_string(), data: v})
+}
+
+
 #[derive(Deserialize)]
 pub struct RegisterMailAuthReq {
     account: String,
