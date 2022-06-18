@@ -649,6 +649,8 @@ pub async fn unseal(
             client_id.clone(), client_secret.clone(), unseal_req.cipher_cond_value.clone());
         let email = parse_oauth_profile(oauth_result.clone());
         if email != cond_value {
+            println!("email {}", email);
+            println!("cond value {}", cond_value);
             return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     }
