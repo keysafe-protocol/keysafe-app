@@ -253,7 +253,7 @@ pub async fn info(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoMailResp {
     status: String,
-    mail: String
+    data: String
 }
 
 #[post("/ks/info_mail")]
