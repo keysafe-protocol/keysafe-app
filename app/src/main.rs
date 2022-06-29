@@ -136,6 +136,7 @@ async fn main() -> std::io::Result<()> {
             .service(auth_confirm)
             .service(info)
             .service(info_oauth)
+            .service(info_mail)
             .service(register_mail_auth)
             .service(register_mail)
             .service(register_gauth)

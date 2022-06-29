@@ -250,6 +250,34 @@ pub async fn info(
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InfoMailResp {
+    status: String,
+    mail: String
+}
+
+#[post("/ks/info_mail")]
+pub async fn info_mail(
+    base_req: web::Json<BaseReq>,
+    endex: web::Data<AppState>,
+) -> HttpResponse {
+    // to prevent sql injection 
+    if base_req.account.contains("'") {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    let stmt = format!(
+        "select * from user_cond where kid = '{}' and cond_type ='email'", 
+        base_req.account
+    );
+    let user_conds = persistence::query_user_cond(&endex.db_pool, stmt);
+    if user_conds.is_empty() {
+        return HttpResponse::Ok().json(
+            InfoMailResp{
+                status: FAIL.to_string(), mail: "".to_string()});
+    }
+    let mail = user_conds[0].tee_cond_value.clone();
+    HttpResponse::Ok().json(InfoMailResp {status: SUCC.to_string(), mail: mail})
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoOAuthResp {
