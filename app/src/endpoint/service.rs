@@ -273,10 +273,10 @@ pub async fn info_mail(
     if user_conds.is_empty() {
         return HttpResponse::Ok().json(
             InfoMailResp{
-                status: FAIL.to_string(), mail: "".to_string()});
+                status: FAIL.to_string(), data: "".to_string()});
     }
     let mail = user_conds[0].tee_cond_value.clone();
-    HttpResponse::Ok().json(InfoMailResp {status: SUCC.to_string(), mail: mail})
+    HttpResponse::Ok().json(InfoMailResp {status: SUCC.to_string(), data: mail})
 }
 
 #[derive(Debug, Serialize, Deserialize)]
