@@ -7,6 +7,7 @@ use std::fs;
 use glob::glob;
 use std::io::Write;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub struct UserCond {
     pub kid: String,
@@ -15,7 +16,7 @@ pub struct UserCond {
     pub tee_cond_size: i32
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserOAuth {
     pub kid: String,
     pub org: String,
@@ -53,6 +54,13 @@ pub fn insert_user_oauth(pool: &Pool, oauth: UserOAuth) {
     tx.commit().unwrap();
 }
 
+pub fn insert_user_oauth2(pool: &Pool, conf: &HashMap<String, String>, oauth: UserOAuth) {
+    let cid = cru_api(conf, "putfile", &oauth.tee_profile);
+    let mut oauth2 = oauth.clone();
+    oauth2.tee_profile = cid;
+    insert_user_oauth(pool, oauth2);
+}
+
 pub fn insert_user_secret(pool: &Pool, usecret: UserSecret) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
@@ -81,6 +89,18 @@ pub fn update_delegate(pool: &Pool, delegate_id: &String, kid: &String) {
     tx.commit().unwrap();
 }
 
+pub fn query_user_oauth2(pool: &Pool, conf: &HashMap<String, String>, stmt: String) -> Vec<UserOAuth> {
+    let result = query_user_oauth(pool, stmt);
+    let mut result2 = vec![];
+    for oauth in result {
+        let mut oauth2 = oauth.clone();
+        let cid = cru_api(conf, "getfile", &oauth.tee_profile);
+        oauth2.tee_profile = cid;
+        result2.push(oauth2);
+    }
+    result2
+}
+
 pub fn query_user_oauth(pool: &Pool, stmt: String) -> Vec<UserOAuth>{
     let mut conn = pool.get_conn().unwrap();
     let mut result: Vec<UserOAuth> = Vec::new();
@@ -95,6 +115,30 @@ pub fn query_user_oauth(pool: &Pool, stmt: String) -> Vec<UserOAuth>{
         });
     });
     result
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CruApiReq {
+    key: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CruApiResp {
+    key: String
+}
+
+fn cru_api(conf: &HashMap<String, String>, method: &str, key: &str) -> String {
+    println!("calling cru api to {} {}", method, key);
+    let cru_api_server = conf.get("cru_api_server").unwrap();
+    let client =  reqwest::blocking::Client::new();
+    let cru_req = CruApiReq {
+        key: key.to_string()
+    };
+    let url = format!("{}/{}", cru_api_server, method);
+    let res = client.post(url)
+        .json(&cru_req)
+        .send().unwrap().json::<CruApiResp>().unwrap();
+    res.key
 }
 
 pub fn query_user_cond(pool: &Pool, stmt: String) -> Vec<UserCond>{

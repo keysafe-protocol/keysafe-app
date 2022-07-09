@@ -298,7 +298,7 @@ pub async fn info_oauth(
         "select * from user_oauth where kid = '{}'", 
         base_req.account
     );
-    let oauths = persistence::query_user_oauth(&endex.db_pool, stmt);
+    let oauths = persistence::query_user_oauth2(&endex.db_pool, &endex.conf, stmt);
     HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
 }
 
@@ -736,8 +736,10 @@ pub async fn oauth(
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(client_id.clone(), client_secret.clone(), oauth_req.code.clone());
-    persistence::insert_user_oauth(
+
+    persistence::insert_user_oauth2(
         &endex.db_pool, 
+        &endex.conf,
         persistence::UserOAuth {
             kid: oauth_req.account.clone(),
             org: oauth_req.org.to_string(),
