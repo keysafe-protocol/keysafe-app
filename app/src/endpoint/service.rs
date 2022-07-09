@@ -299,6 +299,7 @@ pub async fn info_oauth(
         base_req.account
     );
     let oauths = persistence::query_user_oauth2(&endex.db_pool, &endex.conf, stmt);
+    println!("{:?}", oauths);
     HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
 }
 
