@@ -192,6 +192,112 @@ pub async fn auth_confirm(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct InfoOAuthResp {
+    status: String,
+    data: Vec<persistence::UserOAuth>
+}
+
+
+#[post("/ks/info_oauth")]
+pub async fn info_oauth(
+    base_req: web::Json<BaseReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    // to prevent sql injection 
+    if base_req.account.contains("'") {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    let stmt = format!(
+        "select * from user_oauth where kid = '{}'", 
+        base_req.account
+    );
+    let oauths = persistence::query_user_oauth2(&endex.db_pool, &endex.conf, stmt);
+    println!("{:?}", oauths);
+    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthResp {
+    profile: String
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct GithubOAuthReq {
+    client_id: String,
+    client_secret: String,
+    code: String
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct GithubOAuthResp {
+    access_token: String,
+    scope: String,
+    token_type: String
+}
+
+#[post("/ks/oauth")]
+pub async fn oauth(
+    oauth_req: web::Json<OAuthReq>,
+    endex: web::Data<AppState>,
+    user_state: web::Data<UserState>
+) -> HttpResponse {
+    let conf = &endex.conf;
+    println!("oath request with code {}", &oauth_req.code);
+    let client_id = conf.get("github_client_id").unwrap();
+    let client_secret = conf.get("github_client_secret").unwrap();
+    let oauth_result = github_oauth(client_id.clone(), client_secret.clone(), oauth_req.code.clone());
+
+    persistence::insert_user_oauth2(
+        &endex.db_pool, 
+        &endex.conf,
+        persistence::UserOAuth {
+            kid: oauth_req.account.clone(),
+            org: oauth_req.org.to_string(),
+            tee_profile: oauth_result.to_string(),
+            tee_profile_size: 256
+        }
+    );
+    HttpResponse::Ok().json(OAuthResp{
+        profile: oauth_result
+    })
+}
+
+fn github_oauth(
+    client_id: String,
+    client_secret: String,
+    code: String
+) -> String {
+    let http_client = reqwest::blocking::Client::new();
+    let github_oauth_req = GithubOAuthReq {
+        client_id: client_id,
+        client_secret: client_secret,
+        code: code
+    };
+    let res = http_client.post("https://github.com/login/oauth/access_token")
+        .json(&github_oauth_req)
+        .header("Accept", "application/json")
+        .header("User-Agent", "keysafe-protocol")
+        .send().unwrap().json::<GithubOAuthResp>().unwrap();
+    println!("access token response is {:?}", res);
+    // println!("github get access token {}", &res.access_token);
+    let access_token = res.access_token;
+    // let access_token = "123";
+    return http_client.post("https://api.github.com/user")
+        .header("Authorization", format!("token {}", access_token))
+        .header("User-Agent", "keysafe-protocol")
+        .send().unwrap().text().unwrap();
+}
+
+fn parse_oauth_profile(oauth_result: String) -> String {
+    let parsed: Value = serde_json::from_str(&oauth_result).unwrap(); 
+    let obj: Map<String, Value> = parsed.as_object().unwrap().clone();
+    println!("access obj {:?}", obj);
+    let email: String = obj.clone().get("email").unwrap().as_str().unwrap().to_string();
+    email
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InfoResp {
     status: String,
     data: Vec<Coin>
