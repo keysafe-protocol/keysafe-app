@@ -20,10 +20,12 @@ use mysql::*;
 use serde_json::{Value, Map};
 use crate::ecall;
 use crate::persistence;
+use crate::endpoint::auth_token;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use rand::{thread_rng, Rng};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
+
 
 pub struct AppState {
     pub enclave: SgxEnclave,
@@ -33,13 +35,6 @@ pub struct AppState {
 
 pub struct UserState {
     pub state: Arc<Mutex<HashMap<String, String>>>
-}
-
-/// Our claims struct, it needs to derive `Serialize` and/or `Deserialize`
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    sub: String, // acount name
-    exp: usize, // when to expire
 }
 
 struct AuthAccount {
@@ -117,7 +112,6 @@ pub struct AuthReq {
 }
 // with BaseResp
 
-
 #[post("/ks/auth")]
 pub async fn auth(
     auth_req: web::Json<AuthReq>,
@@ -164,7 +158,7 @@ pub async fn auth_confirm(
                 status: SUCC.to_string(),
                 token: encode(
                     &Header::default(), 
-                    &Claims{
+                    &auth_token::Claims{
                         sub: confirm_req.account.clone(),
                         exp: (system_time() + 7 * 24 * 3600).try_into().unwrap()
                     },
@@ -209,24 +203,26 @@ impl PartialEq for Coin {
     }
 }
 
-#[post("/ks/info")]
+#[get("/ks/info")]
 pub async fn info(
-    base_req: web::Json<BaseReq>,
+    req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
-    // to prevent sql injection 
-    if base_req.account.contains("'") {
-        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
-    }
+    let claims = auth_token::extract_token(
+        req.headers().get("Authorization"),
+        &endex.conf["secret"].as_str()
+    );
+    let claims2 = claims.unwrap();
+    let account = claims2.sub.to_string();
     let mut v = Vec::new();
     let stmt = format!(
         "select * from user_secret where kid = '{}'", 
-        base_req.account
+        account
     );
     let secrets = persistence::query_user_secret(&endex.db_pool, stmt);
     for i in &secrets {
         v.push(Coin {
-            owner: base_req.account.clone(),
+            owner: account.clone(),
             chain: i.chain.clone(), 
             chain_addr: i.chain_addr.clone()
         });
@@ -234,7 +230,7 @@ pub async fn info(
 
     let dstmt = format!(
         "select * from user_secret where delegate_id = '{}'", 
-        base_req.account
+        account
     );
     let dsecrets = persistence::query_user_secret(&endex.db_pool, dstmt);
     for i in &dsecrets {
@@ -851,26 +847,6 @@ fn system_time() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(n) => n.as_secs(),
         Err(_) => panic!("SystemTime before UNIX EPOCH!"),
-    }
-}
-
-pub fn verify_token(token_option: Option<&HeaderValue>, secret: &str) -> bool {
-    if let Some(v) = token_option {
-        println!("analysing header {}", v.to_str().unwrap());
-        println!("decode with secret {}", secret);
-        let mut validation = Validation::new(Algorithm::HS256);
-        let token = v.to_str().unwrap();
-        let token_data = decode::<Claims>(&token, &DecodingKey::from_secret(secret.as_ref()), &validation);
-        match token_data {
-            Ok(c) => true,
-            _ => {
-                println!("token verify failed");
-                false 
-            }
-        }
-    } else {
-        println!("extract token from header failed");
-        false
     }
 }
 

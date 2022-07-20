@@ -138,7 +138,7 @@ fn cru_api(conf: &HashMap<String, String>, method: &str, key: &str) -> String {
     let res = client.post(url)
         .json(&cru_req)
         .send().unwrap().json::<CruApiResp>().unwrap();
-    println(res.key);
+    println!("{}", res.key);
     res.key
 }
 
