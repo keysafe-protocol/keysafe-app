@@ -215,6 +215,7 @@ pub async fn info(
     );
     let claims2 = claims.unwrap();
     let account = claims2.sub.to_string();
+    println!("account is {}", account);
     let mut v = Vec::new();
     let stmt = format!(
         "select * from user_secret where kid = '{}'", 
