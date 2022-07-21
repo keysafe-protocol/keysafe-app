@@ -203,8 +203,9 @@ impl PartialEq for Coin {
     }
 }
 
-#[get("/ks/info")]
+#[post("/ks/info")]
 pub async fn info(
+    info_req: web::Json<BaseReq>,
     req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
