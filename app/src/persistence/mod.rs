@@ -27,7 +27,7 @@ pub fn insert_user(pool: &Pool, user: User) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
     tx.exec_drop("delete from user where kid = ?",
-        (user.kid.clone())).unwrap();
+        (user.kid.clone(),)).unwrap();
     tx.exec_drop("insert into user (kid, uname, email) values (?, ?, ?)",
         (user.kid, user.uname, user.email)).unwrap();
     tx.commit().unwrap();

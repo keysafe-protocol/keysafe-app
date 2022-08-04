@@ -140,19 +140,6 @@ pub struct ConfirmReq {
     email: String,
     confirm_code: String
 }
-// with BaseResp
-
-
-// ,
-//                 token: encode(
-//                     &Header::default(), 
-//                     &Claims{
-//                         sub: confirm_req.account.clone(),
-//                         exp: (system_time() + 7 * 24 * 3600).try_into().unwrap()
-//                     },
-//                     &EncodingKey::from_secret(&endex.conf["secret"].as_bytes()),
-//                 ).unwrap()
-
 
 #[post("/ks/auth_confirm")]
 pub async fn auth_confirm(
@@ -164,13 +151,13 @@ pub async fn auth_confirm(
     if let Some(v) = states.get(&confirm_req.email) {
         // when confirm code match, return a new token for current session
         if v == &confirm_req.confirm_code {
-            states.remove(&confirm_req.account); 
+            states.remove(&confirm_req.email); 
             return HttpResponse::Ok().json(BaseResp{
                 status: SUCC.to_string()
             });
         }
     }
-    states.remove(&confirm_req.account); 
+    states.remove(&confirm_req.email); 
     HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
 }
 
@@ -197,23 +184,36 @@ pub async fn register_user(
     register_req: web::Json<RegisterUserReq>,
     endex: web::Data<AppState>
 ) -> HttpResponse {
-    let addr = verify_signed(register_req.sig, register_req.data);
+    let message = serde_json::to_string(&register_req.data).unwrap();
+    let addr = verify_signed(&register_req.sig, &message);
     persistence::insert_user(
-        &endex.pool, 
+        &endex.db_pool, 
         persistence::User {kid: addr.clone(), 
             uname: register_req.data.uname.clone(),
             email: register_req.data.email.clone()});
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
-26(sig: &str, data: &UserData) {
-    let signature = hex::decode(sig);
+fn verify_signed(sig: &String, data: &String) -> String {
+    let signature = hex::decode(sig).unwrap();
     let recoveryid = signature[64] as i32 - 27;
-    let serialized = serde_json::to_string(data).unwrap();
-    let pubkey = recover(&serialized, &signature[..64], recoveryid);
-    return pubkey;
+    let data_hex = format!("{:02X?}", data.as_bytes());
+    let serialized = eth_message(data_hex);
+    let pubkey = recover(&serialized, &signature[..64], recoveryid).unwrap();
+    return format!("{:02X?}", pubkey);
 }
 
+pub fn eth_message(message: String) -> [u8; 32] {
+    keccak256(
+        format!(
+            "{}{}{}",
+            "\x19Ethereum Signed Message:\n",
+            message.len(),
+            message
+        )
+        .as_bytes(),
+    )
+}
 
 #[post("/ks/user_info")]
 pub async fn user_info(
@@ -224,13 +224,12 @@ pub async fn user_info(
     if base_req.account.contains("'") {
         return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
-    let mut v = Vec::new();
     let stmt = format!(
         "select * from user where kid = '{}'", 
-        base_req.addr
+        base_req.account
     );
     let users = persistence::query_user(&endex.db_pool, stmt);
-    HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), user: users[0]})
+    HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), user: users[0].clone()})
 }
 
 
@@ -251,13 +250,13 @@ pub async fn register_github_oauth(
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(client_id.clone(), 
-        client_secret.clone(), register_req.code.clone());
+        client_secret.clone(), register_req.data.clone());
 
-    let addr = verify_signed(register_req.sig, register_req.data);
+    let addr = verify_signed(&register_req.sig, &register_req.data);
 
-    persistence::insert_oauth(&endex.pool, 
+    persistence::insert_oauth(&endex.db_pool, 
         persistence::OAuth { kid: addr.clone(),
-            org: "github",
+            org: "github".to_string(),
             oprofile: oauth_result.clone()
         });
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
