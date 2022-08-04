@@ -200,13 +200,13 @@ pub async fn register_user(
     let addr = verify_signed(register_req.sig, register_req.data);
     persistence::insert_user(
         &endex.pool, 
-        User {kid: addr.clone(), 
+        persistence::User {kid: addr.clone(), 
             uname: register_req.data.uname.clone(),
-            email: register_req.data.email.clone()})
+            email: register_req.data.email.clone()});
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
-fn verify_signed(sig: &str, data: &UserData) {
+26(sig: &str, data: &UserData) {
     let signature = hex::decode(sig);
     let recoveryid = signature[64] as i32 - 27;
     let serialized = serde_json::to_string(data).unwrap();
@@ -251,24 +251,16 @@ pub async fn register_github_oauth(
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(client_id.clone(), 
-        client_secret.clone(), oauth_req.code.clone());
+        client_secret.clone(), register_req.code.clone());
 
     let addr = verify_signed(register_req.sig, register_req.data);
 
     persistence::insert_oauth(&endex.pool, 
-        OAuth { kid: addr.clone(),
+        persistence::OAuth { kid: addr.clone(),
             org: "github",
             oprofile: oauth_result.clone()
-        })
+        });
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
-}
-
-fn verify_signed(sig: &str, data: &UserData) {
-    let signature = hex::decode(sig);
-    let recoveryid = signature[64] as i32 - 27;
-    let serialized = serde_json::to_string(data).unwrap();
-    let pubkey = recover(&serialized, &signature[..64], recoveryid);
-    return pubkey;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -313,6 +305,21 @@ fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
     }
 }
 
+
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct GithubOAuthReq {
+    client_id: String,
+    client_secret: String,
+    code: String
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct GithubOAuthResp {
+    access_token: String,
+    scope: String,
+    token_type: String
+}
 
 fn github_oauth(
     client_id: String,
