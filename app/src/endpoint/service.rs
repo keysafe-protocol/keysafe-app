@@ -195,24 +195,29 @@ pub async fn register_user(
 }
 
 fn verify_signed(sig: &String, data: &String) -> String {
-    let signature = hex::decode(sig).unwrap();
+    println!("verify_signed");
+    println!("signature is {}", sig);
+    println!("data is {}", data);
+    let sigdata = &sig[2..];
+    let signature = hex::decode(sigdata).unwrap();
     let recoveryid = signature[64] as i32 - 27;
-    let data_hex = format!("{:02X?}", data.as_bytes());
-    let serialized = eth_message(data_hex);
+    let serialized = eth_message(data.to_string());
     let pubkey = recover(&serialized, &signature[..64], recoveryid).unwrap();
-    return format!("{:02X?}", pubkey);
+    let pubkey2 = format!("{:02X?}", pubkey);
+    println!("pub key in hex is {}", pubkey2);
+    return pubkey2;
 }
 
 pub fn eth_message(message: String) -> [u8; 32] {
-    keccak256(
-        format!(
-            "{}{}{}",
-            "\x19Ethereum Signed Message:\n",
-            message.len(),
-            message
-        )
-        .as_bytes(),
-    )
+    let msg = format!(
+        "{}{}{}",
+        "\x19Ethereum Signed Message:\n",
+        message.len(),
+        message
+    );
+    println!("msg is {}", msg);
+    keccak256(msg.as_bytes(),
+   )
 }
 
 #[post("/ks/user_info")]
@@ -246,19 +251,19 @@ pub async fn register_github_oauth(
 ) -> HttpResponse {
     let org = "github";
     let conf = &endex.conf;
-    println!("oath request with code {}", &register_req.data);
-    let client_id = conf.get("github_client_id").unwrap();
-    let client_secret = conf.get("github_client_secret").unwrap();
-    let oauth_result = github_oauth(client_id.clone(), 
-        client_secret.clone(), register_req.data.clone());
+    // println!("oath request with code {}", &register_req.data);
+    // let client_id = conf.get("github_client_id").unwrap();
+    // let client_secret = conf.get("github_client_secret").unwrap();
+    // let oauth_result = github_oauth(client_id.clone(), 
+    //     client_secret.clone(), register_req.data.clone());
 
     let addr = verify_signed(&register_req.sig, &register_req.data);
 
-    persistence::insert_oauth(&endex.db_pool, 
-        persistence::OAuth { kid: addr.clone(),
-            org: "github".to_string(),
-            oprofile: oauth_result.clone()
-        });
+    // persistence::insert_oauth(&endex.db_pool, 
+    //     persistence::OAuth { kid: addr.clone(),
+    //         org: "github".to_string(),
+    //         oprofile: oauth_result.clone()
+    //     });
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
