@@ -14,4 +14,3 @@ create table oauth (
     PRIMARY KEY(kid, org)
 );
 
-™

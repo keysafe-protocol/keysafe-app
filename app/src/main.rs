@@ -126,7 +126,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::permissive();
         App::new()
-            .wrap(endpoint::middleware::VerifyToken) 
+           // .wrap(endpoint::middleware::VerifyToken) 
             .wrap(middleware::Logger::default())
             .wrap(cors)
             .app_data(web::Data::clone(&edata))

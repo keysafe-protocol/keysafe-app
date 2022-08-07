@@ -188,7 +188,7 @@ pub async fn register_user(
     let addr = verify_signed(&register_req.sig, &message);
     persistence::insert_user(
         &endex.db_pool, 
-        persistence::User {kid: addr.clone(), 
+        persistence::User { kid: addr.clone(), 
             uname: register_req.data.uname.clone(),
             email: register_req.data.email.clone()});
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
@@ -234,6 +234,9 @@ pub async fn user_info(
         base_req.account
     );
     let users = persistence::query_user(&endex.db_pool, stmt);
+    if users.is_empty() {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), user: users[0].clone()})
 }
 
@@ -251,26 +254,26 @@ pub async fn register_github_oauth(
 ) -> HttpResponse {
     let org = "github";
     let conf = &endex.conf;
-    // println!("oath request with code {}", &register_req.data);
-    // let client_id = conf.get("github_client_id").unwrap();
-    // let client_secret = conf.get("github_client_secret").unwrap();
-    // let oauth_result = github_oauth(client_id.clone(), 
-    //     client_secret.clone(), register_req.data.clone());
+    println!("oath request with code {}", &register_req.data);
+    let client_id = conf.get("github_client_id").unwrap();
+    let client_secret = conf.get("github_client_secret").unwrap();
+    let oauth_result = github_oauth(client_id.clone(), 
+        client_secret.clone(), register_req.data.clone());
 
     let addr = verify_signed(&register_req.sig, &register_req.data);
 
-    // persistence::insert_oauth(&endex.db_pool, 
-    //     persistence::OAuth { kid: addr.clone(),
-    //         org: "github".to_string(),
-    //         oprofile: oauth_result.clone()
-    //     });
+    persistence::insert_oauth(&endex.db_pool, 
+        persistence::OAuth { kid: addr.clone(),
+            org: "github".to_string(),
+            oprofile: oauth_result.clone()
+        });
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoOAuthResp {
     status: String,
-    data: Vec<persistence::OAuth>
+    oauth: Vec<persistence::OAuth>
 }
 
 #[post("/ks/oauth_info")]
@@ -288,7 +291,10 @@ pub async fn oauth_info(
     );
     let oauths = persistence::query_oauth(&endex.db_pool, stmt);
     println!("{:?}", oauths);
-    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
+    if oauths.is_empty() {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), oauth: oauths})
 }
 
 fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
