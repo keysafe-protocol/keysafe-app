@@ -336,7 +336,7 @@ fn github_oauth2(
     client_secret: String,
     code: String
 ) -> String {
-    "mock github oauth"
+    "mock github oauth".to_string()
 }
 
 fn github_oauth(
