@@ -46,7 +46,7 @@ where
         println!("middleware is verifying token.");
         println!("getting path {}", request.path());
 
-        if !request.path().starts_with("/ks/") ||
+        if request.path().starts_with("/ks/") ||
             request.path() == "/ks/auth" || 
             request.path() == "/ks/oauth" ||
             request.path() == "/ks/auth_confirm" {

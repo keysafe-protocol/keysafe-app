@@ -188,31 +188,36 @@ pub async fn register_user(
     let addr = verify_signed(&register_req.sig, &message);
     persistence::insert_user(
         &endex.db_pool, 
-        persistence::User {kid: addr.clone(), 
+        persistence::User { kid: addr.clone(), 
             uname: register_req.data.uname.clone(),
             email: register_req.data.email.clone()});
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
 fn verify_signed(sig: &String, data: &String) -> String {
-    let signature = hex::decode(sig).unwrap();
+    println!("verify_signed");
+    println!("signature is {}", sig);
+    println!("data is {}", data);
+    let sigdata = &sig[2..];
+    let signature = hex::decode(sigdata).unwrap();
     let recoveryid = signature[64] as i32 - 27;
-    let data_hex = format!("{:02X?}", data.as_bytes());
-    let serialized = eth_message(data_hex);
+    let serialized = eth_message(data.to_string());
     let pubkey = recover(&serialized, &signature[..64], recoveryid).unwrap();
-    return format!("{:02X?}", pubkey);
+    let pubkey2 = format!("{:02X?}", pubkey);
+    println!("pub key in hex is {}", pubkey2);
+    return pubkey2;
 }
 
 pub fn eth_message(message: String) -> [u8; 32] {
-    keccak256(
-        format!(
-            "{}{}{}",
-            "\x19Ethereum Signed Message:\n",
-            message.len(),
-            message
-        )
-        .as_bytes(),
-    )
+    let msg = format!(
+        "{}{}{}",
+        "\x19Ethereum Signed Message:\n",
+        message.len(),
+        message
+    );
+    println!("msg is {}", msg);
+    keccak256(msg.as_bytes(),
+   )
 }
 
 #[post("/ks/user_info")]
@@ -229,6 +234,9 @@ pub async fn user_info(
         base_req.account
     );
     let users = persistence::query_user(&endex.db_pool, stmt);
+    if users.is_empty() {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), user: users[0].clone()})
 }
 
@@ -265,7 +273,7 @@ pub async fn register_github_oauth(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoOAuthResp {
     status: String,
-    data: Vec<persistence::OAuth>
+    oauth: Vec<persistence::OAuth>
 }
 
 #[post("/ks/oauth_info")]
@@ -283,7 +291,10 @@ pub async fn oauth_info(
     );
     let oauths = persistence::query_oauth(&endex.db_pool, stmt);
     println!("{:?}", oauths);
-    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
+    if oauths.is_empty() {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), oauth: oauths})
 }
 
 fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
