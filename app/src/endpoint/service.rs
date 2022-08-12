@@ -257,7 +257,7 @@ pub async fn register_github_oauth(
     println!("oath request with code {}", &register_req.data);
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
-    let oauth_result = github_oauth2(client_id.clone(), 
+    let oauth_result = github_oauth(client_id.clone(), 
         client_secret.clone(), register_req.data.clone());
 
     let addr = verify_signed(&register_req.sig, &register_req.data);
