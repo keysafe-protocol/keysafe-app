@@ -296,7 +296,7 @@ pub async fn info_oauth(
         "select * from user_oauth where kid = '{}'", 
         base_req.account
     );
-    let oauths = persistence::query_user_oauth2(&endex.db_pool, &endex.conf, stmt);
+    let oauths = persistence::query_user_oauth(&endex.db_pool, &endex.conf, stmt);
     println!("{:?}", oauths);
     HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
 }
@@ -320,7 +320,6 @@ pub async fn web3_cond(
     }
     HttpResponse::Ok().json(Web3CondResp {status: SUCC.to_string(), data: v})
 }
-
 
 #[derive(Deserialize)]
 pub struct RegisterMailAuthReq {
@@ -736,7 +735,7 @@ pub async fn oauth(
     let client_secret = conf.get("github_client_secret").unwrap();
     let oauth_result = github_oauth(client_id.clone(), client_secret.clone(), oauth_req.code.clone());
 
-    persistence::insert_user_oauth2(
+    persistence::insert_user_oauth(
         &endex.db_pool, 
         &endex.conf,
         persistence::UserOAuth {
