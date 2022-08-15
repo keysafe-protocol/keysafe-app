@@ -296,7 +296,7 @@ pub async fn info_oauth(
         "select * from user_oauth where kid = '{}'", 
         base_req.account
     );
-    let oauths = persistence::query_user_oauth(&endex.db_pool, &endex.conf, stmt);
+    let oauths = persistence::query_user_oauth(&endex.db_pool, stmt);
     println!("{:?}", oauths);
     HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), data: oauths})
 }
@@ -737,7 +737,6 @@ pub async fn oauth(
 
     persistence::insert_user_oauth(
         &endex.db_pool, 
-        &endex.conf,
         persistence::UserOAuth {
             kid: oauth_req.account.clone(),
             org: oauth_req.org.to_string(),
