@@ -271,6 +271,26 @@ pub async fn register_github_oauth(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct DeleteOAuthReq {
+    account: String,
+    org: String
+}
+
+#[post("/ks/delete_github_oauth")]
+pub async fn delete_github_oauth(
+    delete_oauth_req: web::Json<DeleteOAuthReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    let conf = &endex.conf;
+    persistence::delete_oauth(&endex.db_pool, 
+        persistence::OAuth { kid: delete_oauth_req.account.to_string(),
+            org: delete_oauth_req.org.to_string(),
+            oprofile: "".to_string()
+        });
+    HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InfoOAuthResp {
     status: String,
     oauth: Vec<persistence::OAuth>
