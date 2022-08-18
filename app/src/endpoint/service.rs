@@ -276,8 +276,8 @@ pub struct DeleteOAuthReq {
     org: String
 }
 
-#[post("/ks/delete_github_oauth")]
-pub async fn delete_github_oauth(
+#[post("/ks/delete_oauth")]
+pub async fn delete_oauth(
     delete_oauth_req: web::Json<DeleteOAuthReq>,
     endex: web::Data<AppState>
 ) -> HttpResponse {
