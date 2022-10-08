@@ -87,6 +87,7 @@ pub async fn exchange_key(
     let mut out_key: Vec<u8> = vec![0; 256];
     let mut plaintext2 = vec![0; 256];
     println!("user pub key is {}", ex_key_req.key);
+    /*
     let result = unsafe {
         ecall::ec_ks_exchange(e.geteid(), 
             &mut sgx_result, 
@@ -110,6 +111,8 @@ pub async fn exchange_key(
         },
         _ => panic!("exchang key failed.")
     }
+    */
+    HttpResponse::Ok().body("abc")
 }
 
 #[derive(Deserialize)]
