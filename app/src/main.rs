@@ -138,6 +138,7 @@ async fn main() -> std::io::Result<()> {
             .service(register_user)
             .service(user_info)
             .service(register_github_oauth)
+            .service(delete_oauth)
             .service(oauth_info)
             .service(dauth_info)
             .service(dauth_permit)

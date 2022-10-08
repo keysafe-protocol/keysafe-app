@@ -53,6 +53,14 @@ pub fn insert_oauth(pool: &Pool, oauth: OAuth) {
     tx.commit().unwrap();
 }
 
+pub fn delete_oauth(pool: &Pool, oauth: OAuth) {
+    let mut conn = pool.get_conn().unwrap();
+    let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
+    tx.exec_drop("delete from oauth where kid = ? and org = ?",
+        (oauth.kid.clone(), oauth.org.clone())).unwrap();
+    tx.commit().unwrap();
+}
+
 pub fn insert_dauth(pool: &Pool, dauth: DAuth) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
