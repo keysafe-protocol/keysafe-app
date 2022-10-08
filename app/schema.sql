@@ -14,3 +14,14 @@ create table oauth (
     PRIMARY KEY(kid, org)
 );
 
+drop table if exists dauth;
+create table dauth (
+    kid varchar(80) not null,
+    dapp varchar(100) not null,
+    dapp_addr varchar(80) not null,
+    apply_time varchar(80) not null,
+    scope varchar(80) not null,
+    da_status int default 0,
+    PRIMARY KEY(kid, dapp, scope)
+);
+

@@ -23,6 +23,16 @@ pub struct OAuth {
     pub oprofile: String
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DAuth {
+    pub kid: String,
+    pub dapp: String,
+    pub dapp_addr: String,
+    pub apply_time: String,
+    pub scope: String,
+    pub da_status: i32
+}
+
 pub fn insert_user(pool: &Pool, user: User) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
@@ -40,6 +50,16 @@ pub fn insert_oauth(pool: &Pool, oauth: OAuth) {
         (oauth.kid.clone(), oauth.org.clone())).unwrap();
     tx.exec_drop("insert into oauth (kid, org, oprofile) values (?, ?, ?)",
         (oauth.kid, oauth.org, oauth.oprofile)).unwrap();
+    tx.commit().unwrap();
+}
+
+pub fn insert_dauth(pool: &Pool, dauth: DAuth) {
+    let mut conn = pool.get_conn().unwrap();
+    let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
+    tx.exec_drop("delete from dauth where kid = ? and dapp = ? and scope = ?",
+        (dauth.kid.clone(), dauth.dapp.clone(), dauth.scope.clone())).unwrap();
+    tx.exec_drop("insert into dauth (kid, dapp, dapp_addr, apply_time, scope, da_status) values (?, ?, ?, ?, ?, ?)",
+        (dauth.kid, dauth.dapp, dauth.dapp_addr, dauth.apply_time, dauth.scope, dauth.da_status)).unwrap();
     tx.commit().unwrap();
 }
 
@@ -70,6 +90,28 @@ pub fn query_oauth(pool: &Pool, stmt: String) -> Vec<OAuth>{
             kid: r.0,
             org: r.1,
             oprofile: r.2,
+        });
+    });
+    result
+}
+
+pub fn query_dauth(pool: &Pool, stmt: String) -> Vec<DAuth>{
+    let mut conn = pool.get_conn().unwrap();
+    let mut result: Vec<DAuth> = Vec::new();
+    conn.query_iter(stmt).unwrap().for_each(|row| {
+        let r:(std::string::String, 
+            std::string::String, 
+            std::string::String,
+            std::string::String, 
+            std::string::String, 
+            i32) = from_row(row.unwrap());
+        result.push(DAuth {
+            kid: r.0,
+            dapp: r.1,
+            dapp_addr: r.2,
+            apply_time: r.3,
+            scope: r.4,
+            da_status: r.5
         });
     });
     result

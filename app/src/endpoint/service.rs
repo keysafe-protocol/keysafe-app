@@ -194,6 +194,31 @@ pub async fn register_user(
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DAuthPermitReq {
+    data: persistence::DAuth,
+    sig: String
+}
+
+#[post("/ks/dauth_permit")]
+pub async fn dauth_permit(
+    dauth_permit_req: web::Json<DAuthPermitReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    let message = serde_json::to_string(&dauth_permit_req.data).unwrap();
+    let addr = verify_signed(&dauth_permit_req.sig, &message);
+    persistence::insert_dauth(
+        &endex.db_pool, 
+        persistence::DAuth { kid: addr.clone(), 
+            dapp: dauth_permit_req.data.dapp.clone(),
+            dapp_addr: dauth_permit_req.data.dapp_addr.clone(),
+            apply_time: dauth_permit_req.data.apply_time.clone(),
+            scope: dauth_permit_req.data.scope.clone(),
+            da_status: dauth_permit_req.data.da_status
+        });
+    HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
+}
+
 fn verify_signed(sig: &String, data: &String) -> String {
     println!("verify_signed");
     println!("signature is {}", sig);
@@ -239,7 +264,6 @@ pub async fn user_info(
     }
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), user: users[0].clone()})
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegisterOAuthReq {
@@ -295,6 +319,32 @@ pub async fn oauth_info(
         return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
     HttpResponse::Ok().json(InfoOAuthResp {status: SUCC.to_string(), oauth: oauths})
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InfoDAuthResp {
+    status: String,
+    dauth: Vec<persistence::DAuth>
+}
+
+#[post("/ks/dauth_info")]
+pub async fn dauth_info(
+    base_req: web::Json<BaseReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    // to prevent sql injection 
+    if base_req.account.contains("'") {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    let stmt = format!(
+        "select * from dauth where kid = '{}'", 
+        base_req.account
+    );
+    let dauths = persistence::query_dauth(&endex.db_pool, stmt);
+    if dauths.is_empty() {
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+    }
+    HttpResponse::Ok().json(InfoDAuthResp {status: SUCC.to_string(), dauth: dauths})
 }
 
 fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
