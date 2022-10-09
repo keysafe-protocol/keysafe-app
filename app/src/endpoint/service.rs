@@ -204,6 +204,7 @@ pub struct DAuthData {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DAuthPermitReq {
     data: DAuthData,
+    account: String,
     sig: String
 }
 
@@ -217,7 +218,7 @@ pub async fn dauth_permit(
     persistence::update_dauth(
         &endex.db_pool,
         dauth_permit_req.data.did.clone(),
-        addr.clone(),
+        dauth_permit_req.account.clone(),
         dauth_permit_req.data.handle.clone());
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
