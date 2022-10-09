@@ -72,7 +72,7 @@ pub fn insert_dauth(pool: &Pool, dauth: DAuth) {
     tx.commit().unwrap();
 }
 
-pub fn update_dauth(pool: &Pool, did: String, kid: String, da_status: i32) {
+pub fn update_dauth(pool: &Pool, did: String, kid: String, da_status: String) {
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
     tx.exec_drop("update dauth set da_status = ? where kid = ? and did = ?",

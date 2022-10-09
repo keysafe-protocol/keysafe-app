@@ -234,6 +234,7 @@ fn verify_signed(sig: &String, data: &String) -> String {
     let pubkey2 = format!("{:02X?}", pubkey);
     println!("pub key in hex is {}", pubkey2);
     return pubkey2;
+}
 
 pub fn eth_message(message: String) -> [u8; 32] {
     let msg = format!(
@@ -293,7 +294,6 @@ pub async fn register_github_oauth(
             org: "github".to_string(),
             oprofile: oauth_result.clone()
         });
-    persistence::insert_dauth_if_none(addr.clone(), "github:user_profile");
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
