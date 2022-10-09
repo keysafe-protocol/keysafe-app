@@ -194,9 +194,16 @@ pub async fn register_user(
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DAuthData {
+    did: String,
+    handle: String
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DAuthPermitReq {
-    data: persistence::DAuth,
+    data: DAuthData,
     sig: String
 }
 
@@ -207,15 +214,11 @@ pub async fn dauth_permit(
 ) -> HttpResponse {
     let message = serde_json::to_string(&dauth_permit_req.data).unwrap();
     let addr = verify_signed(&dauth_permit_req.sig, &message);
-    persistence::insert_dauth(
-        &endex.db_pool, 
-        persistence::DAuth { kid: addr.clone(), 
-            dapp: dauth_permit_req.data.dapp.clone(),
-            dapp_addr: dauth_permit_req.data.dapp_addr.clone(),
-            apply_time: dauth_permit_req.data.apply_time.clone(),
-            scope: dauth_permit_req.data.scope.clone(),
-            da_status: dauth_permit_req.data.da_status
-        });
+    persistence::update_dauth(
+        &endex.db_pool,
+        dauth_permit_req.data.did.clone(),
+        addr.clone(),
+        dauth_permit_req.data.handle.clone());
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 
@@ -231,7 +234,6 @@ fn verify_signed(sig: &String, data: &String) -> String {
     let pubkey2 = format!("{:02X?}", pubkey);
     println!("pub key in hex is {}", pubkey2);
     return pubkey2;
-}
 
 pub fn eth_message(message: String) -> [u8; 32] {
     let msg = format!(
@@ -291,6 +293,7 @@ pub async fn register_github_oauth(
             org: "github".to_string(),
             oprofile: oauth_result.clone()
         });
+    persistence::insert_dauth_if_none(addr.clone(), "github:user_profile");
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
 

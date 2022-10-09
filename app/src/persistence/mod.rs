@@ -25,12 +25,13 @@ pub struct OAuth {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DAuth {
+    pub did: String,
     pub kid: String,
     pub dapp: String,
     pub dapp_addr: String,
     pub apply_time: String,
     pub scope: String,
-    pub da_status: i32
+    pub da_status: String
 }
 
 pub fn insert_user(pool: &Pool, user: User) {
@@ -71,6 +72,14 @@ pub fn insert_dauth(pool: &Pool, dauth: DAuth) {
     tx.commit().unwrap();
 }
 
+pub fn update_dauth(pool: &Pool, did: String, kid: String, da_status: i32) {
+    let mut conn = pool.get_conn().unwrap();
+    let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
+    tx.exec_drop("update dauth set da_status = ? where kid = ? and did = ?",
+        (da_status, kid, did)).unwrap();
+    tx.commit().unwrap();
+}
+
 pub fn query_user(pool: &Pool, stmt: String) -> Vec<User>{
     let mut conn = pool.get_conn().unwrap();
     let mut result: Vec<User> = Vec::new();
@@ -107,19 +116,21 @@ pub fn query_dauth(pool: &Pool, stmt: String) -> Vec<DAuth>{
     let mut conn = pool.get_conn().unwrap();
     let mut result: Vec<DAuth> = Vec::new();
     conn.query_iter(stmt).unwrap().for_each(|row| {
-        let r:(std::string::String, 
+        let r:(std::string::String,
+            std::string::String, 
             std::string::String, 
             std::string::String,
             std::string::String, 
             std::string::String, 
-            i32) = from_row(row.unwrap());
+            std::string::String) = from_row(row.unwrap());
         result.push(DAuth {
-            kid: r.0,
-            dapp: r.1,
-            dapp_addr: r.2,
-            apply_time: r.3,
-            scope: r.4,
-            da_status: r.5
+            did: r.0,
+            kid: r.1,
+            dapp: r.2,
+            dapp_addr: r.3,
+            apply_time: r.4,
+            scope: r.5,
+            da_status: r.6
         });
     });
     result
