@@ -301,6 +301,7 @@ pub async fn oauth_info(
 }
 
 fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
+    /*
     let mut size: u32 = 0;
     let bcode = hex::decode(&hex_str).expect("Decode Failed.");
     let result = unsafe {
@@ -315,7 +316,8 @@ fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
             size.try_into().unwrap()
         },
         _ => 0
-    }
+    }*/
+    return 0
 }
 
 

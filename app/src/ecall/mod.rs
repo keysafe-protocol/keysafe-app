@@ -9,7 +9,8 @@ extern {
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t
     ) -> sgx_status_t;
-
+    
+    /*
     pub fn ec_ks_exchange(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
@@ -17,6 +18,7 @@ extern {
         strval: *mut c_char,
         strval2: *mut c_char
     ) -> sgx_status_t;
+
 
     pub fn ec_auth(
         eid: sgx_enclave_id_t,
@@ -146,6 +148,6 @@ extern {
         data_len: u32,
         unsealed: *mut c_void
     ) -> sgx_status_t;
-
+    */
 }
 

@@ -21,7 +21,6 @@ enclave {
     from "sgx_backtrace.edl" import *;
     from "sgx_tstdc.edl" import *;
 
-
     trusted {
 		 /* define ECALLs here. */
 		 public sgx_status_t ec_gen_key();
@@ -37,12 +36,13 @@ enclave {
 			size_t len,
 			[in] uint8_t mac[16],
 			[out, size=len] uint8_t* plaintext);
-
-		public sgx_status_t seal(
+		/*
+		public sgx_status_t ec_seal(
 			[in, size=content_size] uint8_t* content, 
 			uint32_t content_size,
 			[out, size=sealed_size] uint8_t* sealed_content, 
 			uint32_t sealed_size );
+		*/
 	};
 
 	untrusted {
