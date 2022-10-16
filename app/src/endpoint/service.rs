@@ -1,4 +1,5 @@
 extern crate openssl;
+extern crate base64;
 #[macro_use]
 use std::str;
 use std::cmp::*;
@@ -84,34 +85,24 @@ pub async fn exchange_key(
 ) ->  impl Responder {
     let e = &endex.enclave;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let mut out_key: Vec<u8> = vec![0; 256];
-    let mut plaintext2 = vec![0; 256];
+    let mut out_key: Vec<u8> = vec![0; 64];
     println!("user pub key is {}", ex_key_req.key);
-    /*
     let result = unsafe {
         ecall::ec_ks_exchange(e.geteid(), 
             &mut sgx_result, 
             ex_key_req.key.as_ptr() as *const c_char,
-            out_key.as_mut_slice().as_mut_ptr() as * mut c_char,
-            plaintext2.as_mut_slice().as_mut_ptr() as * mut c_char,
+            out_key.as_mut_slice().as_mut_ptr() as * mut c_char
         )
     };
     match result {
-        sgx_status_t::SGX_SUCCESS => { 
-            out_key.resize(256, 0);
-            let mut chars: Vec<char>= Vec::new();
-            for i in out_key {
-                if i != 0 {
-                    chars.push(i as char);
-                }
-            }
-            let hex_key: String = chars.into_iter().collect();
-            println!("sgx pub key {}", hex_key);
-            HttpResponse::Ok().body(hex_key)
+        sgx_status_t::SGX_SUCCESS => {
+            out_key.resize(64, 0);
+            let text = base64::encode(out_key);
+            println!("sgx pub key {}", text);
+            return HttpResponse::Ok().body(text);
         },
         _ => panic!("exchang key failed.")
     }
-    */
     HttpResponse::Ok().body("abc")
 }
 
@@ -257,6 +248,38 @@ pub async fn register_github_oauth(
 ) -> HttpResponse {
     let org = "github";
     let conf = &endex.conf;
+    let client_id = conf.get("github_client_id").unwrap();
+    let client_secret = conf.get("github_client_secret").unwrap();
+
+    let e = &endex.enclave;
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    println!("one time code is {}", &register_req.data);
+    let result = unsafe {
+        ecall::ec_register_github_oauth(e.geteid(), 
+            &mut sgx_result, 
+            register_req.data.as_ptr() as *const c_char,
+            client_id.as_ptr() as *const c_char,
+            client_secret.as_ptr() as *const c_char
+        )
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            return HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()});
+        },
+        _ => {
+            return HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()});
+        }
+    }
+}
+
+/*
+#[post("/ks/register_github_oauth")]
+pub async fn register_github_oauth(
+    register_req: web::Json<RegisterOAuthReq>,
+    endex: web::Data<AppState>
+) -> HttpResponse {
+    let org = "github";
+    let conf = &endex.conf;
     println!("oath request with code {}", &register_req.data);
     let client_id = conf.get("github_client_id").unwrap();
     let client_secret = conf.get("github_client_secret").unwrap();
@@ -272,6 +295,7 @@ pub async fn register_github_oauth(
         });
     HttpResponse::Ok().json(BaseResp {status: SUCC.to_string()})
 }
+*/
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoOAuthResp {
@@ -319,8 +343,6 @@ fn calc_tee_size(e: sgx_enclave_id_t, hex_str: &String) -> usize {
     }*/
     return 0
 }
-
-
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GithubOAuthReq {

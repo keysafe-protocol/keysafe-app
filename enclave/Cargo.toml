@@ -1,5 +1,5 @@
 [package]
-name = "keysafe"
+name = "ksenclave"
 version = "1.0.0"
 authors = ["The Teaclave Authors"]
 
@@ -10,16 +10,20 @@ crate-type = ["staticlib"]
 [features]
 default = []
 
-[dependencies]
-serde = { git = "https://github.com/mesalock-linux/serde-sgx.git", features = ["derive"] }
-proc-macro2 = { version = "=1.0.32" }
-quote = { version = "=1.0.10" }
 [target.'cfg(not(target_env = "sgx"))'.dependencies]
 sgx_types = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tstd = { git = "https://github.com/apache/teaclave-sgx-sdk.git", features = ["backtrace"] }
 sgx_trts = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tcrypto = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tseal = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+
+[dependencies]
+serde = { git = "https://github.com/mesalock-linux/serde-sgx.git", features = ["derive"] }
+proc-macro2 = { version = "=1.0.32" }
+quote = { version = "=1.0.10" }
+serde_json = { git = "https://github.com/mesalock-linux/serde-json-sgx" }
+http_req = { git = "https://github.com/mesalock-linux/http_req-sgx" }
+
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_alloc = { path = "../../../sgx_alloc" }

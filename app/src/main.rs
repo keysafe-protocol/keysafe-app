@@ -30,7 +30,7 @@ use config::Config;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
+static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 #[no_mangle]
 pub extern "C"

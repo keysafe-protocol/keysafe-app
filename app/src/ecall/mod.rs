@@ -10,16 +10,23 @@ extern {
         retval: *mut sgx_status_t
     ) -> sgx_status_t;
     
-    /*
+
     pub fn ec_ks_exchange(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t,
         user_pub_key: *const c_char,
-        strval: *mut c_char,
-        strval2: *mut c_char
+        tee_pub_key: *mut c_char,
     ) -> sgx_status_t;
 
+    pub fn ec_register_github_oauth(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        cipher_code: *const c_char,
+        client_id: *const c_char,
+        client_secret: *const c_char
+    ) -> sgx_status_t;
 
+    /*
     pub fn ec_auth(
         eid: sgx_enclave_id_t,
         retval: *mut u32,
