@@ -81,7 +81,18 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     match result {
         sgx_status_t::SGX_SUCCESS => {},
         _ => panic!("Enclave generate key-pair failed!")
-    }
+    };
+    let result2 = unsafe {
+        ecall::ec_register_github_oauth(
+            enclave.geteid(), &mut sgx_result,
+            "123".as_ptr() as *const c_char, 
+            "fd2d170df56ebacde768".as_ptr() as *const c_char, 
+            "87eb1ad0847f195ea98e7f09c3dbd44b61128833".as_ptr() as *const c_char)
+    };
+    match result2 {
+        sgx_status_t::SGX_SUCCESS => {},
+        _ => panic!("github failed")
+    };
     return enclave;
 }
 

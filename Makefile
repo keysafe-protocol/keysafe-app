@@ -16,7 +16,7 @@
 # under the License.
 
 ######## SGX SDK Settings ########
-
+SGX_SDK_RUST ?= /home/livermore/workspace/incubator-teaclave-sgx-sdk/
 SGX_SDK ?= /opt/intel/sgxsdk/sgxsdk/
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
@@ -63,9 +63,8 @@ SGX_COMMON_CFLAGS += -fstack-protector
 
 CUSTOM_LIBRARY_PATH := ./lib
 CUSTOM_BIN_PATH := ./bin
-CUSTOM_EDL_PATH := ../../edl
-CUSTOM_COMMON_PATH := ../../common
-
+CUSTOM_EDL_PATH := $(SGX_SDK_RUST)/edl
+CUSTOM_COMMON_PATH := $(SGX_SDK_RUST)/common
 ######## EDL Settings ########
 
 Enclave_EDL_Files := enclave/Enclave_t.c enclave/Enclave_t.h app/Enclave_u.c app/Enclave_u.h
@@ -96,13 +95,13 @@ ProtectedFs_Library_Name := sgx_tprotected_fs
 
 RustEnclave_C_Files := $(wildcard ./enclave/*.c)
 RustEnclave_C_Objects := $(RustEnclave_C_Files:.c=.o)
-RustEnclave_Include_Paths := -I$(CUSTOM_EDL_PATH) -I$(CUSTOM_COMMON_PATH)/inc -I$(CUSTOM_COMMON_PATH) -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport -I$(SGX_SDK)/include/epid -I ./enclave -I./include -I$(SGXSSL_INCLUDE_PATH)
+RustEnclave_Include_Paths := -I $(CUSTOM_EDL_PATH) -I$(CUSTOM_COMMON_PATH)/inc -I$(CUSTOM_COMMON_PATH) -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport -I$(SGX_SDK)/include/epid -I ./enclave -I./include 
 
 RustEnclave_Link_Libs := -L$(CUSTOM_LIBRARY_PATH) -lenclave
 RustEnclave_Compile_Flags := $(SGX_COMMON_CFLAGS) $(ENCLAVE_CFLAGS) $(RustEnclave_Include_Paths)
 RustEnclave_Link_Flags := -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfiles -L$(SGX_LIBRARY_PATH) \
 	-Wl,--whole-archive -l$(Trts_Library_Name) -Wl,--no-whole-archive \
-	-Wl,--start-group -lsgx_tstdc -l$(Crypto_Library_Name) -l$(Service_Library_Name) $(RustEnclave_Link_Libs) -Wl,--end-group \
+	-Wl,--start-group -lsgx_tstdc -l$(Service_Library_Name) -l$(Crypto_Library_Name) $(RustEnclave_Link_Libs) -Wl,--end-group \
 	-Wl,--version-script=enclave/Enclave.lds \
 	$(ENCLAVE_LDFLAGS)
 
@@ -137,10 +136,12 @@ $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
 ######## Enclave Objects ########
 
 enclave/Enclave_t.o: $(Enclave_EDL_Files)
+	@echo "making enclave objects"
 	@$(CC) $(RustEnclave_Compile_Flags) -c enclave/Enclave_t.c -o $@
 	@echo "CC   <=  $<"
 
 $(RustEnclave_Name): enclave enclave/Enclave_t.o
+	@echo "linking enclave libs"
 	@$(CXX) enclave/Enclave_t.o -o $@ $(RustEnclave_Link_Flags)
 	@echo "LINK =>  $@"
 

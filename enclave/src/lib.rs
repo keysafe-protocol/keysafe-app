@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License..
 
-#![crate_name = "ksenclave"]
+#![crate_name = "enclave"]
 #![crate_type = "staticlib"]
 
 #![cfg_attr(not(target_env = "sgx"), no_std)]
@@ -52,6 +52,7 @@ use std::net::TcpStream;
 use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
 use std::string::String;
 use std::string::ToString;
+use std::backtrace::{self, PrintFormat};
 
 //use std::prelude::v1::*;
 
@@ -184,11 +185,14 @@ pub extern "C" fn ec_ks_exchange(user_pub_key: *const c_char,
 pub extern "C" fn ec_register_github_oauth(code: *const c_char,
                                            client_id: *const c_char,
                                            client_secret: *const c_char) -> sgx_status_t {
-    println!("enclave is up and running.");
+    println!("calling ec_register_github_oauth");
+    let _ = backtrace::enable_backtrace("enclave.signed.so", PrintFormat::Full);
+    let tcode = unsafe { CStr::from_ptr(code).to_str() };
+    let tclient_id = unsafe { CStr::from_ptr(client_id).to_str() };
+    let tclient_secret = unsafe { CStr::from_ptr(client_secret).to_str() };
+    github_oauth(tcode.unwrap(), tclient_id.unwrap(), tclient_secret.unwrap());
     sgx_status_t::SGX_SUCCESS
 }
-
-
 
 #[no_mangle]
 pub extern "C" fn ecall_aes_gcm_128_encrypt(
@@ -338,7 +342,6 @@ pub extern "C" fn ecall_aes_gcm_128_decrypt(
             ptr::copy_nonoverlapping(plaintext_slice.as_ptr(), plaintext, text_len);
         },
     }
-
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -418,33 +421,44 @@ pub struct GithubOAuthResp {
 }
 
 fn github_oauth(
-    client_id: String,
-    client_secret: String,
-    code: String
+    client_id: &str,
+    client_secret: &str,
+    code: &str
 ) -> String {
     let addr: Uri = "https://github.com/login/oauth/access_token".parse().unwrap();
-    let stream = TcpStream::connect(
-        (addr.host().unwrap(), addr.corr_port())).unwrap();
-    let mut stream = tls::Config::default()
-        .connect(addr.host().unwrap_or(""), stream)
-        .unwrap();
+    println!("{}", addr.host().unwrap());
+    println!("{}", addr.corr_port());
+    let conn_addr = format!("{}:{}", addr.host().unwrap(), addr.corr_port());
+    println!("conn_addr is {}", conn_addr);
+    let stream = TcpStream::connect(conn_addr);
+    match stream {
+        Ok(r) => {
+            let mut stream = tls::Config::default()
+            .connect(addr.host().unwrap_or(""), r)
+            .unwrap();
+        
+        let mut writer = Vec::new();
+        let body = format!("{{\"client_id\":\"{}\", \"client_secret\":\"{}\", \"code\":\"{}\"}}",
+            client_id, client_secret, code);
     
-    let mut writer = Vec::new();
-    let body = format!("{{\"client_id\":\"{}\", \"client_secret\":\"{}\", \"code\":\"{}\"}}",
-        client_id, client_secret, code);
-
-    let response = RequestBuilder::new(&addr)
-        .method(Method::POST)
-        .header("Accept", "application/json")
-        .header("User-Agent", "keysafe-protocol")
-        .header("Connection", "Close")
-        .body(body.as_bytes())
-        .send(&mut stream, &mut writer)
-        .unwrap();
-    
-    let body = String::from_utf8_lossy(&writer);
-    println!("access token response is {:?}", body);
-    body.to_string()
+        let response = RequestBuilder::new(&addr)
+            .method(Method::POST)
+            .header("Accept", "application/json")
+            .header("User-Agent", "keysafe-protocol")
+            .header("Connection", "Close")
+            .body(body.as_bytes())
+            .send(&mut stream, &mut writer)
+            .unwrap();
+        
+        let body = String::from_utf8_lossy(&writer);
+        println!("access token response is {:?}", body);
+        return body.to_string()    ;
+        },
+        Err(err) => {
+            println!("{:?}", err);
+            panic!("building TcpConnection failed");
+        }
+    };
 }
 
 fn parse_oauth_profile(oauth_result: String) -> String {
