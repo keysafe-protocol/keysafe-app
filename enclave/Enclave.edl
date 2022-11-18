@@ -32,13 +32,13 @@ enclave {
 			[in, string]char* user_pub_key, 
 			[out,size=64]char* tee_pub_key);
 
+		/*
 		 public sgx_status_t ec_register_github_oauth(
 			[in, string]char* code,
 			[in, string]char* client_id,
 			[in, string]char* client_secret
 		 );
 
-		/*
 		 public sgx_status_t ecall_aes_gcm_128_encrypt(
 			[in, size=len] const uint8_t* plaintext,
 			size_t len,

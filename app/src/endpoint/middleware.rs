@@ -2,11 +2,12 @@ use std::future::{ready, Ready};
 use actix_web::body::EitherBody;
 use actix_web::dev::{self, ServiceRequest, ServiceResponse};
 use actix_web::dev::{Service, Transform};
-use actix_web::{web, http, Error, HttpResponse};
+use actix_web::{web, Error, HttpResponse};
 use futures_util::future::LocalBoxFuture;
 
 pub struct VerifyToken;
 
+use crate::endpoint::auth_token;
 use crate::endpoint::service::*;
 
 impl<S, B> Transform<S, ServiceRequest> for VerifyToken
@@ -46,7 +47,7 @@ where
         println!("middleware is verifying token.");
         println!("getting path {}", request.path());
 
-        if request.path().starts_with("/ks/") ||
+        if !request.path().starts_with("/ks/") ||
             request.path() == "/ks/auth" || 
             request.path() == "/ks/oauth" ||
             request.path() == "/ks/auth_confirm" {
@@ -59,7 +60,7 @@ where
         }
         let endex = request.app_data::<web::Data<AppState>>().unwrap();
         let secret = &endex.conf.get("secret").unwrap();
-        if verify_token(request.headers().get("Authorization"), secret) {
+        if auth_token::verify_token(request.headers().get("Authorization"), secret) {
             println!("path that requires token and verifying.");
             let res = self.service.call(request);
             return Box::pin(async move {
@@ -76,3 +77,5 @@ where
         Box::pin(async { Ok(ServiceResponse::new(request, response)) })
     }
 }
+
+

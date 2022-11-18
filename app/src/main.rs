@@ -30,7 +30,7 @@ use config::Config;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-static ENCLAVE_FILE: &'static str = "enclave.signed.so";
+static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
 #[no_mangle]
 pub extern "C"
@@ -81,18 +81,7 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     match result {
         sgx_status_t::SGX_SUCCESS => {},
         _ => panic!("Enclave generate key-pair failed!")
-    };
-    let result2 = unsafe {
-        ecall::ec_register_github_oauth(
-            enclave.geteid(), &mut sgx_result,
-            "123".as_ptr() as *const c_char, 
-            "fd2d170df56ebacde768".as_ptr() as *const c_char, 
-            "87eb1ad0847f195ea98e7f09c3dbd44b61128833".as_ptr() as *const c_char)
-    };
-    match result2 {
-        sgx_status_t::SGX_SUCCESS => {},
-        _ => panic!("github failed")
-    };
+    }
     return enclave;
 }
 
@@ -137,19 +126,29 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::permissive();
         App::new()
-           // .wrap(endpoint::middleware::VerifyToken) 
+            .wrap(endpoint::middleware::VerifyToken) 
             .wrap(middleware::Logger::default())
             .wrap(cors)
             .app_data(web::Data::clone(&edata))
             .app_data(web::Data::clone(&ustate))
-            .service(hello)
             .service(exchange_key)
             .service(auth)
             .service(auth_confirm)
-            .service(register_user)
-            .service(user_info)
-            .service(register_github_oauth)
-            .service(oauth_info)
+            .service(info)
+            .service(info_oauth)
+            .service(info_mail)
+            .service(register_mail_confirm)
+            .service(register_mail)
+            //.service(register_gauth)
+            .service(register_password)
+            .service(register_oauth_github)
+            .service(seal)
+            .service(unseal)
+            .service(delegate)
+            .service(delete_seal)
+            .service(hello)
+            .service(oauth)
+            .service(web3_cond)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
     .bind_openssl(server_url, builder)?
