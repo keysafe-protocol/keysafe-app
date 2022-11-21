@@ -18,13 +18,13 @@
 ######## SGX SDK Settings ########
 SGX_SDK_RUST ?= /home/livermore/workspace/incubator-teaclave-sgx-sdk/
 SGX_SDK ?= /opt/intel/sgxsdk/sgxsdk/
-SGX_MODE ?= HW
+SGX_MODE ?= SW
 SGX_ARCH ?= x64
-SGXSSL_INCLUDE_PATH ?= /opt/intel/sgxssl/include
-SGXSSL_CRYPTO_INCLUDE_PATH ?= /opt/intel/sgxssl/include/crypto
-SGXSSL_TRUSTED_LIB_PATH ?= /opt/intel/sgxssl/lib64
+SGXSSL_INCLUDE_PATH ?= $(SGXSSL_CRYPTO)/include
+SGXSSL_CRYPTO_INCLUDE_PATH ?= $(SGXSSL_CRYPTO)/include/crypto
+SGXSSL_TRUSTED_LIB_PATH ?= $(SGXSSL_CRYPTO)/lib64
 
-TOP_DIR := ../..
+TOP_DIR := $(SGX_SDK_RUST)
 include $(TOP_DIR)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)

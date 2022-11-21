@@ -418,7 +418,7 @@ pub struct RegisterGauthResp {
     status: String,
     gauth: String,
 }
-/*
+
 #[post("/ks/register_gauth")]
 pub async fn register_gauth(
     register_gauth_req: web::Json<BaseReq>,
@@ -473,7 +473,7 @@ pub async fn register_gauth(
         _ => panic!("require GAuth secret failed!")
     }
 }
-*/
+
 #[derive(Deserialize)]
 pub struct DelegateReq {
     account: String,

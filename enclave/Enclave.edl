@@ -1,20 +1,3 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 enclave {
     from "sgx_tstd.edl" import *;
     from "sgx_stdio.edl" import *;
@@ -25,38 +8,54 @@ enclave {
     from "sgx_file.edl" import *;
 
     trusted {
-		 /* define ECALLs here. */
 		 public sgx_status_t ec_gen_key();
 		 
 		 public sgx_status_t ec_ks_exchange(
 			[in, string]char* user_pub_key, 
 			[out,size=64]char* tee_pub_key);
 
-		/*
-		 public sgx_status_t ec_register_github_oauth(
-			[in, string]char* code,
-			[in, string]char* client_id,
-			[in, string]char* client_secret
-		 );
+        public sgx_status_t ec_gen_gauth_secret([out, size=len]uint8_t* sealedSecret, int len, [out, size=256]uint8_t* encrypted_secret);
 
-		 public sgx_status_t ecall_aes_gcm_128_encrypt(
-			[in, size=len] const uint8_t* plaintext,
-			size_t len,
-			[out, size=len] uint8_t* ciphertext,
-			[out] uint8_t mac[16]);
+        public uint32_t ec_check_code([in, size=len]uint8_t* sealed_secret, int len, 
+                                                                uint64_t tm, 
+                                                                [in ,size=code_len]uint8_t* encrypted_code, int code_len, 
+                                                                [in, size=len2]uint8_t* sealed_data, int len2, 
+                                                                [out, size=8192]char* chip);
 
-		 public sgx_status_t ecall_aes_gcm_128_decrypt(
-			[in, size=len] const uint8_t* ciphertext,
-			size_t len,
-			[in] uint8_t mac[16],
-			[out, size=len] uint8_t* plaintext);
+        public uint32_t ec_calc_sealed_size(uint32_t len);
 
-		public sgx_status_t ec_seal(
-			[in, size=content_size] uint8_t* content, 
-			uint32_t content_size,
-			[out, size=sealed_size] uint8_t* sealed_content, 
-			uint32_t sealed_size );
-		*/
+        public sgx_status_t ec_ks_seal([in, size=len]const char *str, int len, 
+                                                                [out, size=sealedSize]uint8_t* sealedStr, int sealedSize);
+
+        public uint32_t ec_ks_unseal2([in,string] const char* account, 
+                                                                [in,size=cipher_code_len]uint8_t* code_cipher, uint32_t cipher_code_len, 
+                                                                [in, size=condition_size] uint8_t* condition, uint32_t condition_size, 
+                                                                [in, size=sealed_data_size]uint8_t* sealed_data, uint32_t sealed_data_size, 
+                                                                [out, size=encrypted_unseal_data_size]uint8_t* encrypted_unseal_data, uint32_t encrypted_unseal_data_size);
+
+        public uint32_t ec_ks_unseal([in, string]const char* pkey, [in, size=data_size] uint8_t* str, uint32_t data_size);
+
+        public uint32_t ec_prove_me([in, size=klen]uint8_t* key_pt, int klen, [out, size=8192] char* unsealStr);
+
+        public uint32_t ec_auth([in, string]const char* account, [in, string] const char* userpkeyHex);
+
+        public sgx_status_t ec_auth_confirm([in, string] const char* account, [in, size=cipher_len] uint8_t* code_cipher, uint32_t cipher_len);
+
+        public uint32_t ec_gen_register_mail_code([in, string]const char* account, [in, size=content_len] uint8_t* content, uint32_t content_len);
+
+        public sgx_status_t ec_register_mail([in, string]const char* account, 
+                                                                        [in, size=cipher_code_len]uint8_t* code_cipher, uint32_t cipher_code_len, 
+                                                                        [out, size=sealedSize]uint8_t* sealedStr, int sealedSize);
+
+
+        public sgx_status_t ec_register_password([in, string]const char* account, 
+                                                                                    [in, size=cipher_code_len]uint8_t* code_cipher, uint32_t cipher_code_len, 
+                                                                                    [out, size=sealedSize]uint8_t* sealedStr, int sealedSize);
+
+
+        public sgx_status_t ec_register_gauth([in, string]const char* account, 
+                                                                            [out, size=cipher_secret_len]uint8_t* secret_cipher, uint32_t cipher_secret_len, 
+                                                                            [out, size=sealedSize]uint8_t* sealedStr, int sealedSize);
 	};
 
 	untrusted {

@@ -139,7 +139,7 @@ async fn main() -> std::io::Result<()> {
             .service(info_mail)
             .service(register_mail_confirm)
             .service(register_mail)
-            //.service(register_gauth)
+            .service(register_gauth)
             .service(register_password)
             .service(register_oauth_github)
             .service(seal)

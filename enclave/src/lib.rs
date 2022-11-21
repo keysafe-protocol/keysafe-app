@@ -1,20 +1,3 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License..
-
 #![crate_name = "enclave"]
 #![crate_type = "staticlib"]
 
@@ -53,14 +36,15 @@ use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
 use std::string::String;
 use std::string::ToString;
 use std::backtrace::{self, PrintFormat};
-
+use std::collections::HashMap;
 // use std::prelude::v1::*;
 // use sgx_tseal::{SgxSealedData};
 
 
 struct EnclaveState {
     pub_k: sgx_ec256_public_t,
-    prv_k: sgx_ec256_private_t
+    prv_k: sgx_ec256_private_t,
+    user_state: HashMap<String, String>
 }
 
 
@@ -69,7 +53,6 @@ struct EnclaveState {
 struct SingletonReader {
     inner: SgxMutex<EnclaveState>,
 }
-
 
 fn singleton() -> &'static SingletonReader {
     // Create an uninitialized static
@@ -86,6 +69,7 @@ fn singleton() -> &'static SingletonReader {
                 inner: SgxMutex::new(EnclaveState {
                     pub_k: pub_k,
                     prv_k: prv_k,
+                    user_state: HashMap::new()
                 }),
             };
             // Store it to the static var, i.e. initialize it
@@ -404,11 +388,147 @@ fn github_oauth(
     };
 }
 
-fn parse_oauth_profile(oauth_result: String) -> String {
-    let parsed: Value = serde_json::from_str(&oauth_result).unwrap(); 
-    let obj: Map<String, Value> = parsed.as_object().unwrap().clone();
-    println!("access obj {:?}", obj);
-    let email: String = obj.clone().get("email").unwrap().as_str().unwrap().to_string();
-    email
-}
 */
+
+#[no_mangle]
+pub extern "C" fn ec_gen_register_mail_code(
+    account: *const c_char,
+    cipher_code: *const c_char,
+    cipher_size: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_register_mail(
+    account: *const c_char,
+    cipher_code: *const c_char,
+    cipher_size: u32,
+    sealed_mail: *mut c_void,
+    sealed_size: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_register_password(
+    account: *const c_char,
+    cipher_code: *const c_char,
+    cipher_size: u32,
+    sealed_password: *mut c_void,
+    sealed_size: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+#[no_mangle]
+pub extern "C" fn ec_register_gauth(
+    account: *const c_char,
+    cipher_gauth: *mut c_void,
+    cipher_size: u32,
+    sealed_gauth: *mut c_void,
+    sealed_size: u32,
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_gen_gauth_secret(
+    sealed_gauth: *mut c_char,
+    sealed_size: u32,
+    cipher_gauth: *mut c_char
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_verify_gauth_code(
+    code: i32,
+    gauth_secret: *const c_char,
+    time: u64
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_ks_seal(
+    account: *const c_char,
+    cipher_secret: *const c_char,
+    cipher_size: u32,
+    sealed_secret: *mut c_void,
+    sealed_size: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_ks_unseal2(
+    account: *const c_char,
+    cipher_cond: *const c_char, // user encrypted password or confirm code or etc
+    cipher_cond_size: u32,
+    cond_type: *const c_char,
+    sealed_cond: *const c_char,
+    sealed_cond_size: u32,
+    sealed_secret: *const c_char,
+    sealed_secret_size: u32,
+    unsealed_secret: *mut c_void,
+    unsealed_secret_size: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_ks_unseal(
+    user_pub_key: *const c_char,
+    sealed: *const c_char,
+    len3: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_prove_me(
+    code: *const c_char,
+    code_len: u32,
+    unsealed: *mut c_void
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_calc_sealed_size(
+    len1: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_check_code(
+    secret: *const c_char,
+    secret_len: u32,
+    tm: u64,
+    code: *const c_char,
+    code_len: u32,
+    data: *const c_char,
+    data_len: u32,
+    unsealed: *mut c_void
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+
+#[no_mangle]
+pub extern "C"  fn ec_auth_confirm(
+    account: *const c_char,
+    cipher_code: *const c_char,
+    cipher_size: u32
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_auth(
+    account: *const c_char,
+    user_pub_key: *const c_char
+) -> sgx_status_t {
+    sgx_status_t::SGX_SUCCESS
+}
