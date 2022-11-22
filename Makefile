@@ -16,7 +16,7 @@
 # under the License.
 
 ######## SGX SDK Settings ########
-SGX_SDK_RUST ?= /home/livermore/workspace/incubator-teaclave-sgx-sdk/
+SGX_SDK_RUST ?= /root/incubator-teaclave-sgx-sdk/
 SGX_SDK ?= /opt/intel/sgxsdk/sgxsdk/
 SGX_MODE ?= SW
 SGX_ARCH ?= x64
