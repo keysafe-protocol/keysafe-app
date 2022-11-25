@@ -9,21 +9,26 @@ use actix_web::{
 use crate::endpoint::utils;
 
 
-/// Our claims struct, it needs to derive `Serialize` and/or `Deserialize`
+/// Claims is used when encode and decode JWT token
+/// fields including: 
+/// sub: account name and
+/// exp: expire date 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String, // acount name
-    pub exp: usize, // when to expire
+    pub sub: String, 
+    pub exp: usize, 
 }
 
-
+/// Verify token including: checking whether token format is valid,
+/// and whether token expired or not, return true for valid and false for invalid
 pub fn verify_token(token_option: Option<&HeaderValue>, secret: &str) -> bool {
     if let Some(v) = token_option {
         println!("analyze header {} with {}", v.to_str().unwrap(), secret);
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
         let token = v.to_str().unwrap();
-        let token_data = decode::<Claims>(&token, &DecodingKey::from_secret(secret.as_ref()), &validation);
+        let token_data = decode::<Claims>(
+            &token, &DecodingKey::from_secret(secret.as_ref()), &validation);
         match token_data {
             Ok(c) => true,
             _ => {
@@ -37,7 +42,8 @@ pub fn verify_token(token_option: Option<&HeaderValue>, secret: &str) -> bool {
     }
 }
 
-
+/// Extract token extracts sub from Claims,
+/// when extract successfully, returns sub as account name, or None when failure
 pub fn extract_token(token_option: Option<&HeaderValue>, 
     secret: &str) -> Option<Claims> {
     if let Some(v) = token_option {
@@ -58,12 +64,14 @@ pub fn extract_token(token_option: Option<&HeaderValue>,
     }        
 }
 
-
+/// Gen token calls gen_token_n with expire date length
+/// currently set to 7 days as 7 days with 24 hours with 3600 seconds
 pub fn gen_token(account: &str, secret: &str) -> String {
     gen_token_n(account, secret, 7 * 24 * 3600)
 }
 
-
+/// It generates a new token using Claims and secret,
+/// where Claims including account name as sub, and 7 days ahead as expiry date
 fn gen_token_n(account: &str, secret: &str, n: u64) -> String {
     println!("{}", utils::system_time());
     encode(

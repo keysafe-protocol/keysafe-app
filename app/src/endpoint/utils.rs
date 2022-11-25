@@ -5,6 +5,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 
 
+/// Get system time now in u64 format
 pub fn system_time() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(n) => n.as_secs(),
@@ -12,6 +13,8 @@ pub fn system_time() -> u64 {
     }
 }
 
+/// Sendmail using account in config file
+/// to account in args
 pub fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     if conf.get("env").unwrap() == "dev" {
         println!("send mail {} to {}", msg, account);
@@ -55,6 +58,7 @@ struct ProxyMailResp {
     status: String
 }
 
+/// Sendmail through proxy server when mail-server got blocked.
 pub fn proxy_mail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     println!("calling proxy mail {} {}", account, msg);
     let proxy_mail_server = conf.get("proxy_mail_server").unwrap();

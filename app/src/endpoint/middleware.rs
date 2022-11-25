@@ -31,6 +31,11 @@ pub struct VerifyTokenMiddleware<S> {
     service: S,
 }
 
+/// Middleware runs for every request, 
+/// for images and js file, bypass middleware check
+/// for requests before authenticate, bypass middleware check
+/// for everything else, if request doesn't include a valid Authorization header,
+/// reject it.
 impl<S, B> Service<ServiceRequest> for VerifyTokenMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,

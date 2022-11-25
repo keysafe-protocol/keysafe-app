@@ -25,35 +25,48 @@ use rand::{thread_rng, Rng};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
 
 
+/// AppState includes:
+/// enclave instance, db_pool instance and config instance
+/// It is Passed to every request handler
 pub struct AppState {
     pub enclave: SgxEnclave,
     pub db_pool: Pool,
     pub conf: HashMap<String, String>
 }
 
+/// User state includes a Map
+/// which stores user account -> confirm code mapping
 pub struct UserState {
     pub state: Arc<Mutex<HashMap<String, String>>>
 }
 
+/// Authenticated account includes a name or email
 struct AuthAccount {
     name: String,
 }
 
+/// BaseReq is a base request for most requests
 #[derive(Deserialize)]
 pub struct BaseReq {
     account: String
 }
 
+/// BaseResp is a base response for most request
+/// status can either be:
+/// SUCCESS or 
+/// FAIL
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BaseResp {
     status: String,
 }
 
+/// Exchange Key Request includes a user public key for secure channel
 #[derive(Deserialize)]
 pub struct ExchangeKeyReq {
     key: String
 }
 
+/// 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExchangeKeyResp {
     status: String,

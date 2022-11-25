@@ -42,9 +42,9 @@ use sp_core::{sr25519, Pair};
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
+/// This is for enclave debug, to print certain information inside sgx to console
 #[no_mangle]
-pub extern "C"
-fn oc_print(msg: *const c_char) -> sgx_status_t {
+pub extern "C" fn oc_print(msg: *const c_char) -> sgx_status_t {
     let c_str: &CStr = unsafe { CStr::from_ptr(msg)};
     let result = c_str.to_str();
     match result {
@@ -59,6 +59,7 @@ fn oc_print(msg: *const c_char) -> sgx_status_t {
     return sgx_status_t::SGX_SUCCESS;    
 }
 
+/// Create enclave instance when app starts
 fn init_enclave() -> SgxEnclave {
     let mut launch_token: sgx_launch_token_t = [0; 1024];
     let mut launch_token_updated: i32 = 0;
@@ -81,7 +82,9 @@ fn init_enclave() -> SgxEnclave {
     };
 }
 
-fn init_enclave_and_genkey() -> SgxEnclave {
+/// Create enclave instance and generate key pairs inside tee
+/// for secure communication
+fn init_enclave_and_gen_key() -> SgxEnclave {
     let enclave = init_enclave();
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
 
@@ -95,15 +98,18 @@ fn init_enclave_and_genkey() -> SgxEnclave {
     return enclave;
 }
 
+/// Create database connection pool using conf from config file 
 fn init_db_pool(conf: &HashMap<String, String>) -> Pool {
     let db_user = conf.get("db_user").unwrap();
     let db_password = conf.get("db_password").unwrap();
-    let db_url = format!("mysql://{}:{}@localhost:3306/keysafe", db_user, db_password);
+    let db_url = format!("mysql://{}:{}@localhost:{}/{}", 
+        db_user, db_password, db_port, db_name);
     let ops = Opts::from_url(&db_url).unwrap();
     let pool = mysql::Pool::new(ops).unwrap();
     return pool;
 }
 
+/// Read config file and save config to hash map 
 fn load_conf(fname: &str) -> HashMap<String, String> {
     Config::builder()
         .add_source(config::File::with_name(fname))
@@ -113,6 +119,8 @@ fn load_conf(fname: &str) -> HashMap<String, String> {
         .unwrap()
 }
 
+/// Report to chain that current node is up and running
+/// Read account information from environment variable
 async fn register_node(phrase: &str) -> Result<()> {
     let api = OnlineClient::<PolkadotConfig>::new().await.unwrap();
     let pair = sr25519::Pair::from_string(phrase, None).unwrap();
@@ -131,23 +139,30 @@ async fn register_node(phrase: &str) -> Result<()> {
     Ok(())
 }
 
+/// This is the entrance of the web app server.
+/// It binds all api to function defined in mod endpoint.
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     println!("logging!");
     let conf = load_conf("conf");
+    // edata stores environment and config information
     let edata: web::Data<AppState> = web::Data::new(AppState{
-        enclave: init_enclave_and_genkey(),
+        enclave: init_enclave(),
         db_pool: init_db_pool(&conf),
         conf: conf.clone()
     });
+    // ustate stores user state information e.g. confirmation code that sends
+    // to user's mailbox.
     let ustate: web::Data<UserState> = web::Data::new(UserState{
         state: Arc::new(Mutex::new(HashMap::new()))
     });
+    // user set Account information through Environment variable
+    // which will be used for register to chain
     register_node(&env::var("KS_ACCOUNT").unwrap());
+    // add certs to server for https service api
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    builder
-        .set_private_key_file("certs/MyKey.key", SslFiletype::PEM)
+    builder.set_private_key_file("certs/MyKey.key", SslFiletype::PEM)
         .unwrap();
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
