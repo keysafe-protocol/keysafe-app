@@ -4,6 +4,7 @@ extern crate log;
 extern crate log4rs;
 
 use std::str;
+use std::env;
 use std::ffi::CStr;
 
 use actix_web::{dev::Service as _, web, App, HttpResponse, HttpRequest, HttpServer, middleware};
@@ -29,6 +30,15 @@ use endpoint::service::*;
 use config::Config;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+use subxt::{
+    dynamic::Value,
+    tx::PairSigner,
+    OnlineClient,
+    PolkadotConfig,
+};
+
+use sp_core::{sr25519, Pair};
 
 static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
 
@@ -103,6 +113,24 @@ fn load_conf(fname: &str) -> HashMap<String, String> {
         .unwrap()
 }
 
+async fn register_node(phrase: &str) -> Result<()> {
+    let api = OnlineClient::<PolkadotConfig>::new().await.unwrap();
+    let pair = sr25519::Pair::from_string(phrase, None).unwrap();
+    let signer = PairSigner::new(pair);
+    // call register_node when start up
+    let tx = subxt::dynamic::tx(
+        "KeyLedger",
+        "register_node",
+        vec![
+            Value::string("testnode"),
+        ],
+    );
+    // submit the transaction with default params:
+    let hash = api.tx().sign_and_submit_default(&tx, &signer).await.unwrap();
+    println!("Balance transfer extrinsic submitted: {}", hash);
+    Ok(())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
@@ -116,6 +144,7 @@ async fn main() -> std::io::Result<()> {
     let ustate: web::Data<UserState> = web::Data::new(UserState{
         state: Arc::new(Mutex::new(HashMap::new()))
     });
+    register_node(&env::var("KS_ACCOUNT").unwrap());
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder
         .set_private_key_file("certs/MyKey.key", SslFiletype::PEM)

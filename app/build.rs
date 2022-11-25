@@ -23,7 +23,7 @@ fn main () {
                     .unwrap_or_else(|_| "/opt/intel/sgxsdk/sgxsdk".to_string());
     let is_sim = env::var("SGX_MODE")
                     .unwrap_or_else(|_| "HW".to_string());
-    let ssl_dir = env::var("ENV SGXSSL_CRYPTO")
+    let ssl_dir = env::var("SGXSSL_CRYPTO")
                     .unwrap_or_else(|_| "/opt/intel/sgxssl/".to_string());
 
     println!("cargo:rustc-link-search=native=../lib");
