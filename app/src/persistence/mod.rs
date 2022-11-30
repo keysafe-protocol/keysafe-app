@@ -1,14 +1,9 @@
 use mysql::*;
 use mysql::prelude::*;
 
-use std::fs::File;
-use std::fs;
-
-use glob::glob;
-use std::io::Write;
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCond {
     pub kid: String,
     pub cond_type: String,
@@ -24,6 +19,7 @@ pub struct UserOAuth {
     pub tee_profile_size: i32
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserSecret {
     pub kid: String,
     pub cond_type: String,

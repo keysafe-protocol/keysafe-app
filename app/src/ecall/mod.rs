@@ -4,11 +4,11 @@ use sgx_types::*;
 
 
 extern {
+
     pub fn ec_gen_key(
         eid: sgx_enclave_id_t, 
         retval: *mut sgx_status_t
     ) -> sgx_status_t;
-
 
     pub fn ec_ks_exchange(
         eid: sgx_enclave_id_t, 

@@ -7,14 +7,12 @@ use std::str;
 use std::env;
 use std::ffi::CStr;
 
-use actix_web::{dev::Service as _, web, App, HttpResponse, HttpRequest, HttpServer, middleware};
+use actix_web::{dev::Service as _, web, App, HttpServer, middleware};
 use actix_cors::Cors;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as afs;
-use futures_util::future::FutureExt;
 
 use log::{error, info, warn};
-use actix_web::error::ErrorUnauthorized;
 extern crate sgx_types;
 extern crate sgx_urts;
 use sgx_types::*;
@@ -49,11 +47,11 @@ pub extern "C" fn oc_print(msg: *const c_char) -> sgx_status_t {
     let result = c_str.to_str();
     match result {
         // if successfully decode to a utf8 string
-        Ok(v) => println!("enclave: {}", v),
+        Ok(v) => info!("enclave: {}", v),
         // else it is a bytes array
         Err(e) => {
             let plaintext = c_str.to_bytes();
-            println!("enclave: {:?}", plaintext);        
+            error!("enclave: {:?}", plaintext);        
         }
     }
     return sgx_status_t::SGX_SUCCESS;    
@@ -73,11 +71,12 @@ fn init_enclave() -> SgxEnclave {
                        &mut misc_attr);
     match sgx_result {
         Ok(r) => {
-            println!("[+] Init Enclave Successful {}!", r.geteid());
+            info!("Init Enclave Successful {}!", r.geteid());
             return r;
         },
         Err(x) => {
-            panic!("[-] Init Enclave Failed {}!", x.as_str());
+            error!("Init Enclave Failed {}!", x.as_str());
+            panic!("Init Enclave Failed, exiting");
         },
     };
 }
@@ -102,6 +101,8 @@ fn init_enclave_and_gen_key() -> SgxEnclave {
 fn init_db_pool(conf: &HashMap<String, String>) -> Pool {
     let db_user = conf.get("db_user").unwrap();
     let db_password = conf.get("db_password").unwrap();
+    let db_port: &String = conf.get("db_port").unwrap();
+    let db_name: &String = conf.get("db_name").unwrap();
     let db_url = format!("mysql://{}:{}@localhost:{}/{}", 
         db_user, db_password, db_port, db_name);
     let ops = Opts::from_url(&db_url).unwrap();
@@ -135,7 +136,7 @@ async fn register_node(phrase: &str) -> Result<()> {
     );
     // submit the transaction with default params:
     let hash = api.tx().sign_and_submit_default(&tx, &signer).await.unwrap();
-    println!("Balance transfer extrinsic submitted: {}", hash);
+    info!("Balance transfer extrinsic submitted: {}", hash);
     Ok(())
 }
 
@@ -144,7 +145,7 @@ async fn register_node(phrase: &str) -> Result<()> {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
-    println!("logging!");
+    info!("logging!");
     let conf = load_conf("conf");
     // edata stores environment and config information
     let edata: web::Data<AppState> = web::Data::new(AppState{
@@ -159,7 +160,11 @@ async fn main() -> std::io::Result<()> {
     });
     // user set Account information through Environment variable
     // which will be used for register to chain
-    register_node(&env::var("KS_ACCOUNT").unwrap());
+    let chain_result = register_node(&env::var("KS_ACCOUNT").unwrap()).await;
+    if let Err(c_result) = chain_result {
+        error!("register to chain failed, {}", c_result);
+        panic!("register to chain failed, {}", c_result);
+    }
     // add certs to server for https service api
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder.set_private_key_file("certs/MyKey.key", SslFiletype::PEM)

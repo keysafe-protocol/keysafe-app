@@ -4,10 +4,9 @@ use std::str;
 use std::cmp::*;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{
-    get, post, web, Error, HttpRequest, HttpResponse, 
-    Responder, FromRequest, http::header::HeaderValue, 
-    http::header::TryIntoHeaderValue, http::header::InvalidHeaderValue};
-use hex;
+    get, post, web, HttpRequest, HttpResponse, 
+    Responder 
+};
 use log::{error, info, warn};
 extern crate sgx_types;
 extern crate sgx_urts;
@@ -22,12 +21,12 @@ use crate::endpoint::utils;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use rand::{thread_rng, Rng};
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
 
 
 /// AppState includes:
 /// enclave instance, db_pool instance and config instance
 /// It is Passed to every request handler
+#[derive(Debug)]
 pub struct AppState {
     pub enclave: SgxEnclave,
     pub db_pool: Pool,
@@ -36,17 +35,19 @@ pub struct AppState {
 
 /// User state includes a Map
 /// which stores user account -> confirm code mapping
+#[derive(Debug)]
 pub struct UserState {
     pub state: Arc<Mutex<HashMap<String, String>>>
 }
 
 /// Authenticated account includes a name or email
+#[derive(Debug)]
 struct AuthAccount {
     name: String,
 }
 
 /// BaseReq is a base request for most requests
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct BaseReq {
     account: String
 }
@@ -66,13 +67,14 @@ pub struct ExchangeKeyReq {
     key: String
 }
 
-/// 
+/// Exchange key Response returns tee public key
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExchangeKeyResp {
     status: String,
     key: Vec<c_char>
 }
 
+/// Gen random confirm code for user mail authentication
 fn gen_random() -> i32 {
     let mut rng = thread_rng();
     rng.gen_range(1000..9999)
@@ -81,6 +83,11 @@ fn gen_random() -> i32 {
 static SUCC: &'static str = "success";
 static FAIL: &'static str = "fail";
 
+
+/// Exchange key function takes exchange key req from user
+/// which includes user pub key
+/// and return exchange key resp
+/// which includes tee pub key 
 #[post("/ks/exchange_key")]
 pub async fn exchange_key(
     ex_key_req: web::Json<ExchangeKeyReq>,
@@ -89,7 +96,7 @@ pub async fn exchange_key(
     let e = &endex.enclave;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     let mut out_key: Vec<u8> = vec![0; 64];
-    println!("user pub key is {}", ex_key_req.key);
+    info!("user pub key is {}", ex_key_req.key);
     let result = unsafe {
         ecall::ec_ks_exchange(e.geteid(), 
             &mut sgx_result, 
@@ -108,7 +115,10 @@ pub async fn exchange_key(
             println!("sgx pub key {}", hex_key);
             HttpResponse::Ok().body(hex_key)
         },
-        _ => panic!("exchang key failed.")
+        _ => {
+            error!("exchange key ecall failed.");
+            HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()})
+        }
     }
 }
 
@@ -126,14 +136,15 @@ pub async fn auth(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let result = gen_random();
+    info!("/ks/auth for {}", &auth_req.account);
     let sr = utils::sendmail(&auth_req.account, &result.to_string(), &endex.conf);
-    if sr == 0 {
-        let mut states = user_state.state.lock().unwrap();
-        states.insert(auth_req.account.clone(), result.to_string());
-        HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
-    } else {
-        HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+    if sr == 1 {
+        error!("sendmail failed");
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
+    let mut states = user_state.state.lock().unwrap();
+    states.insert(auth_req.account.clone(), result.to_string());
+    HttpResponse::Ok().json(BaseResp{status: SUCC.to_string()})
 }
 
 #[derive(Deserialize)]
@@ -157,19 +168,25 @@ pub async fn auth_confirm(
     user_state: web::Data<UserState>
 ) -> HttpResponse {
     let mut states = user_state.state.lock().unwrap();
-    if let Some(v) = states.get(&confirm_req.account) {
-        // when confirm code match, return a new token for current session
-        if v == &confirm_req.cipher_code {
-            println!("generating token with secret {}", &endex.conf["secret"]);
-            return HttpResponse::Ok().json(ConfirmResp{
-                status: SUCC.to_string(),
-                token: auth_token::gen_token(
-                    &confirm_req.account, &endex.conf["secret"]),
-            });
-        } 
+    // return failure when confirm code not found
+    if let None = states.get(&confirm_req.account) {
+        info!("fail to find user account {} in state table", &confirm_req.account);
+        return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
     }
-    states.remove(&confirm_req.account); 
-    HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
+    // return failure when confirm code found but not match
+    if let Some(v) = states.get(&confirm_req.account) {
+        if v != &confirm_req.cipher_code {
+            info!("confirm code does not match for {}", &confirm_req.account);
+            return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()});
+        }
+    }
+    // when confirm code found and match, remove code, return a new token
+    info!("generating token with secret {}", &endex.conf["secret"]);
+    states.remove(&confirm_req.account);
+    return HttpResponse::Ok().json(ConfirmResp {
+        status: SUCC.to_string(),
+        token: auth_token::gen_token(&confirm_req.account, &endex.conf["secret"]),
+    });
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -204,9 +221,8 @@ impl PartialEq for Coin {
     }
 }
 
-#[post("/ks/info")]
+#[get("/ks/info")]
 pub async fn info(
-    info_req: web::Json<BaseReq>,
     req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
@@ -214,6 +230,10 @@ pub async fn info(
         req.headers().get("Authorization"),
         &endex.conf["secret"].as_str()
     );
+    if let None = claims {
+        info!("authorization fail for token verify");
+        return HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()});
+    }
     let claims2 = claims.unwrap();
     let account = claims2.sub.to_string();
     println!("account is {}", account);

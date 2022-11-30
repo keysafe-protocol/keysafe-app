@@ -17,13 +17,13 @@ pub fn system_time() -> u64 {
 /// to account in args
 pub fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
     if conf.get("env").unwrap() == "dev" {
-        println!("send mail {} to {}", msg, account);
+        info!("send mail {} to {}", msg, account);
         return 0;
     }
     if conf.contains_key("proxy_mail") {
         return proxy_mail(account, msg, conf);
     }
-    println!("send mail {} to {}", msg, account);
+    info!("send mail {} to {}", msg, account);
     let email = Message::builder()
         .from("Verification Node <verify@keysafe.network>".parse().unwrap())
         .reply_to("None <none@keysafe.network>".parse().unwrap())
@@ -42,8 +42,8 @@ pub fn sendmail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32
 
     // Send the email
     match mailer.send(&email) {
-        Ok(_) => { println!("Email sent successfully!"); return 0 },
-        Err(e) => { println!("Could not send email: {:?}", e); return 1 },
+        Ok(_) => { info!("Email sent successfully!"); return 0 },
+        Err(e) => { error!("Could not send email: {:?}", e); return 1 },
     }
 }
 
@@ -60,7 +60,7 @@ struct ProxyMailResp {
 
 /// Sendmail through proxy server when mail-server got blocked.
 pub fn proxy_mail(account: &str, msg: &str, conf: &HashMap<String, String>) -> i32 {
-    println!("calling proxy mail {} {}", account, msg);
+    info!("calling proxy mail {} {}", account, msg);
     let proxy_mail_server = conf.get("proxy_mail_server").unwrap();
     let client = reqwest::blocking::Client::new();
     let proxy_mail_req = ProxyMailReq {
