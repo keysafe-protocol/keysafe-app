@@ -108,6 +108,7 @@ app/Enclave_u.o: $(Enclave_EDL_Files)
 	@echo "CC   <=  $<"
 
 $(App_Enclave_u_Object): app/Enclave_u.o
+	@mkdir lib
 	$(AR) rcsD $@ $^
 
 $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
