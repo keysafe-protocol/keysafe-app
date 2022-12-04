@@ -50,6 +50,6 @@
 ```
 + inside docker instance, build package
 ```
-  cd incubator-teaclave-sgx-sdk/samplecode/keysafe-app/;
+  cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/;
   make SGX_MODE=SW
 ```
