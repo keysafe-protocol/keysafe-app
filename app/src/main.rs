@@ -100,11 +100,12 @@ fn init_enclave_and_gen_key() -> SgxEnclave {
 /// Create database connection pool using conf from config file 
 fn init_db_pool(conf: &HashMap<String, String>) -> Pool {
     let db_user = conf.get("db_user").unwrap();
+    let db_host = conf.get("db_host").unwrap();
     let db_password = conf.get("db_password").unwrap();
     let db_port: &String = conf.get("db_port").unwrap();
     let db_name: &String = conf.get("db_name").unwrap();
-    let db_url = format!("mysql://{}:{}@localhost:{}/{}", 
-        db_user, db_password, db_port, db_name);
+    let db_url = format!("mysql://{}:{}@{}:{}/{}", 
+        db_user, db_password, db_host, db_port, db_name);
     let ops = Opts::from_url(&db_url).unwrap();
     let pool = mysql::Pool::new(ops).unwrap();
     return pool;
