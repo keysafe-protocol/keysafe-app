@@ -36,9 +36,19 @@
 ```
 ## setup with docker
 + install docker
-+ build keysafe-app docker instance
++ build mysql db docker instance 
 ```
   git clone https://github.com/keysafe-protocol/keysafe-app.git
+  docker pull mysql:latest 
+  docker run --name ks-db -p 12345:3306 -v $PWD/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=ks123 -d mysql:latest
+```
++ login mysql docker instance to setup db 
+```
+  docker exec -it ks-db bash
+  # inside docker, create db, 
+```
++ build keysafe-app docker instance
+```
   cd docker
   docker build -t ks01 -f Dockerfile .
   cd ..
@@ -52,4 +62,9 @@
 ```
   cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/;
   make SGX_MODE=SW
+```
++ inside docker instance, prepare environment before start up
+```
+  cd bin
+  ../scripts/prepare_bin.sh
 ```

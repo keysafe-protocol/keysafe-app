@@ -1,3 +1,6 @@
+create database keysafe;
+use keysafe;
+
 drop table if exists teestore;
 create table teestore (
     ks_id varchar(40) not null,
@@ -48,3 +51,12 @@ create table user_oauth (
     tee_profile_size int default 0,
     PRIMARY KEY(kid, org)
 );
+
+delete from mysql.user where User like '%ksadmin%';
+drop user 'ksadmin';
+flush privileges;
+create user 'ksadmin'@'localhost' identified by 'ks123';
+create user 'ksadmin'@'%' identified by 'ks123';
+grant all on keysafe.* to 'ksadmin'@'localhost';
+grant all on keysafe.* to 'ksadmin'@'%';
+flush privileges;
