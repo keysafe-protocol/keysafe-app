@@ -127,8 +127,8 @@ pub struct AuthReq {
     account: String,
     key: String,
 }
-// with BaseResp
 
+// with BaseResp
 #[post("/ks/auth")]
 pub async fn auth(
     auth_req: web::Json<AuthReq>,
@@ -153,8 +153,8 @@ pub struct ConfirmReq {
     mail: String,
     cipher_code: String
 }
-// with BaseResp
 
+// with BaseResp
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfirmResp {
     status: String,

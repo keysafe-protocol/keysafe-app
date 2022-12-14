@@ -39,6 +39,7 @@ time= "=0.3.9"
 base64 = "=0.13.0"
 subxt = "=0.25.0"
 sp-core = "7.0.0"
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "full", "bit-vec"] }
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }

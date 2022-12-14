@@ -57,6 +57,11 @@ pub extern "C" fn oc_print(msg: *const c_char) -> sgx_status_t {
     return sgx_status_t::SGX_SUCCESS;    
 }
 
+
+#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
+pub mod node_runtime { }
+
+
 /// Create enclave instance when app starts
 fn init_enclave() -> SgxEnclave {
     let mut launch_token: sgx_launch_token_t = [0; 1024];
@@ -123,7 +128,7 @@ fn load_conf(fname: &str) -> HashMap<String, String> {
 
 /// Report to chain that current node is up and running
 /// Read account information from environment variable
-async fn register_node(phrase: &str) -> Result<()> {
+async fn register_node(phrase: &str) {
     let api = OnlineClient::<PolkadotConfig>::new().await.unwrap();
     let pair = sr25519::Pair::from_string(phrase, None).unwrap();
     let signer = PairSigner::new(pair);
@@ -136,9 +141,15 @@ async fn register_node(phrase: &str) -> Result<()> {
         ],
     );
     // submit the transaction with default params:
-    let hash = api.tx().sign_and_submit_default(&tx, &signer).await.unwrap();
-    info!("Balance transfer extrinsic submitted: {}", hash);
-    Ok(())
+    let hash = api.tx().sign_and_submit_default(&tx, &signer).await;
+    match hash {
+        Ok(hash) => {
+            info!("register_node: {}", hash);
+        },
+        Err(e) => { 
+            error!("register_node: {}", e);
+        }
+    }
 }
 
 /// This is the entrance of the web app server.
@@ -161,11 +172,7 @@ async fn main() -> std::io::Result<()> {
     });
     // user set Account information through Environment variable
     // which will be used for register to chain
-    let chain_result = register_node(&env::var("KS_ACCOUNT").unwrap()).await;
-    if let Err(c_result) = chain_result {
-        error!("register to chain failed, {}", c_result);
-        panic!("register to chain failed, {}", c_result);
-    }
+    register_node(&env::var("KS_ACCOUNT").unwrap()).await;
     // add certs to server for https service api
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     builder.set_private_key_file("certs/MyKey.key", SslFiletype::PEM)
