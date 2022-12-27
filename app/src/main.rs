@@ -38,7 +38,7 @@ use subxt::{
 
 use sp_core::{sr25519, Pair};
 
-static ENCLAVE_FILE: &'static str = "libenclave_ks.signed.so";
+static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 /// This is for enclave debug, to print certain information inside sgx to console
 #[no_mangle]
