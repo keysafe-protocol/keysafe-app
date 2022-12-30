@@ -38,33 +38,42 @@
 + install docker
 + build mysql db docker instance 
 ```
-  git clone https://github.com/keysafe-protocol/keysafe-app.git
   docker pull mysql:latest 
   docker run --name ks-db -p 12345:3306 -v $PWD/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=ks123 -d mysql:latest
 ```
 + login mysql docker instance to setup db 
 ```
   docker exec -it ks-db bash
-  # inside docker, create db, 
+  # inside docker, create db, user and schema
+  mysql -h localhost -u root -pks123
+  copy app/schema.sql to mysql shell
+  exit # mysql shell
+  exit # mysql docker instance
 ```
 + build keysafe-app docker instance
 ```
+  git clone https://github.com/keysafe-protocol/keysafe-app.git
   cd docker
   docker build -t ks01 -f Dockerfile .
   cd ..
-  docker run -v ${PWD}:/root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app -ti ks01
-```
-+ inside docker instance, run unit test
-```
-  cd incubator-teaclave-sgx-sdk/samplecode/keysafe-app/app; cargo test
+  docker run --network host -v ${PWD}:/root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app -ti ks01
 ```
 + inside docker instance, build package
 ```
   cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/;
   make SGX_MODE=SW
 ```
++ inside docker instance, run unit test
+```
+  cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/app; cargo test
+```
 + inside docker instance, prepare environment before start up
 ```
-  cd bin
+  cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/bin;
   ../scripts/prepare_bin.sh
+```
++ start service
+```
+  export KS_ACCOUNT="zone envelope fish dolphin cup conduct burden tomato uphold final wood dune"
+  ./app
 ```
