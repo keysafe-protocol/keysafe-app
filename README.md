@@ -104,10 +104,9 @@
 
 + when saving your secret key, you will have 4 options, email/passwd/gauth/oauth@github.
 + <img width="276" alt="image" src="https://user-images.githubusercontent.com/1289853/210266717-5dd80cf4-0971-4d80-be5a-0f7432287088.png">
-  + You can by pass the oauth@Github by using other 3 functions as your recovery condition.
-  + <img width="446" alt="image" src="https://user-images.githubusercontent.com/1289853/210266792-c14f263b-4cad-4dc4-b034-6e4a5fee41bc.png">
-  + <img width="596" alt="image" src="https://user-images.githubusercontent.com/1289853/210266822-3409392d-2614-4507-9f95-5252b7ba004b.png">
-  + you need a client-id and client-secret to use oauth@github.
++ You can by pass the oauth@Github by using other 3 functions as your recovery condition.
++ <img width="446" alt="image" src="https://user-images.githubusercontent.com/1289853/210266792-c14f263b-4cad-4dc4-b034-6e4a5fee41bc.png">
++ <img width="1434" alt="image" src="https://user-images.githubusercontent.com/1289853/210267793-0e4b0fd4-4729-41a4-a3fa-d35880d719c1.png">
 + when recovering your secret key, prove yourself with 2 of the 3 conditions above, e.g. email + passwd or email + google-auth. After that, your secret key will be fully recovered.
   + <img width="584" alt="image" src="https://user-images.githubusercontent.com/1289853/210267235-41f6305e-76b4-40ca-ab0f-e96ea41013ef.png">
   + <img width="571" alt="image" src="https://user-images.githubusercontent.com/1289853/210267279-86988315-1657-41e2-b0db-bd22d8b34956.png">
