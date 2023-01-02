@@ -87,4 +87,4 @@
   docker build -t keysafe-frontend .
   docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://127.0.0.1:30000/ks' keysafe-frontend
 ```
-+ visit https://127.0.0.1:3000 to open the website
++ visit http://127.0.0.1:3000 to open the website
