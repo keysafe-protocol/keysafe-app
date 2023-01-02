@@ -53,6 +53,8 @@
 + build keysafe-app docker instance
 ```
   git clone https://github.com/keysafe-protocol/keysafe-app.git
+  cd keysafe-app
+  git checkout polkadot
   cd docker
   docker build -t ks01 -f Dockerfile .
   cd ..
@@ -72,8 +74,17 @@
   cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/bin;
   ../scripts/prepare_bin.sh
 ```
-+ start service
++ start service, once started, ./app stucks waiting for requests
 ```
   export KS_ACCOUNT="zone envelope fish dolphin cup conduct burden tomato uphold final wood dune"
   ./app
 ```
++ start front-end 
+```
+  cd <a-new-directory>
+  git clone https://github.com/keysafe-protocol/keysafe-front
+  git checkout polkadot
+  docker build -t keysafe-frontend .
+  docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://127.0.0.1:30000/ks' keysafe-frontend
+```
++ visit https://127.0.0.1:3000 to open the website
