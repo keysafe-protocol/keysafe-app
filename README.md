@@ -88,4 +88,15 @@
   docker build -t keysafe-frontend .
   docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://<your-ip-address>:30000/ks' keysafe-frontend
 ```
-+ visit http://<your-ip-address>:3000 to open the website
++ visit http://your-ip-address:3000 to open the website
+
+## use case
++ click login for the first time
++ input your email account
++ when running in dev mode ( by default in conf.toml ), email will not be sent, confirm code is recorded in bin/logs/ks.log
++ when running in production mode, email will be sent using official email account with a confirm code.
++ use your confirm code to login your email account
++ when saving your secret key, you will have 4 options, email/passwd/google-auth/github-oauth.
+  + email/passwd/google-auth will be available by default
+  + you need a client-id and client-secret to use github-oauth.
++ when recovering your secret key, prove yourself with 2 of the 3 conditions above, e.g. email + passwd or email + google-auth.
