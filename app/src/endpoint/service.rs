@@ -653,7 +653,6 @@ pub async fn unseal(
             return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     } else if &unseal_req.cond_type == "gauth" {
-        /*
         //let sealed_gauth = hex::decode(cond_value).expect("Decode failed.");
         let mut sgx_result = sgx_status_t::SGX_SUCCESS;
         println!("gauth {} with code {}", cond_value, unseal_req.cipher_cond_value.parse::<i32>().unwrap());
@@ -672,7 +671,6 @@ pub async fn unseal(
             sgx_status_t::SGX_SUCCESS => {},
             _ => return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
-        */
     } else if &unseal_req.cond_type == "oauth@github" {
         let client_id = conf.get("github_client_id").unwrap();
         let client_secret = conf.get("github_client_secret").unwrap();

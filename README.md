@@ -77,7 +77,7 @@
 + start service, once started, ./app stucks waiting for requests
 ```
   export KS_ACCOUNT="zone envelope fish dolphin cup conduct burden tomato uphold final wood dune"
-  ./app
+  ./app &
 ```
 + start front-end 
 ```

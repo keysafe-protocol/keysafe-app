@@ -13,4 +13,9 @@ ENV SGX_SDK_RUST=/root/incubator-teaclave-sgx-sdk
 ENV SGX_MODE=SW
 ENV SGXSSL_CRYPTO=/opt/intel/sgxssl/
 
+ADD get_ks_sgx.sh /root
+RUN bash /root/get_ks_sgx.sh
+
+ENV KS_SGX_SRC=/root/ks-sgx/
+
 WORKDIR /root 

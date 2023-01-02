@@ -16,19 +16,19 @@
 # under the License.
 
 ######## SGX SDK Settings ########
+SGX_SDK_RUST ?= /root/incubator-teaclave-sgx-sdk/
+SGX_SDK ?= /opt/intel/sgxsdk/sgxsdk/
+SGX_MODE ?= SW
+SGX_ARCH ?= x64
+SGXSSL_INCLUDE_PATH ?= $(SGXSSL_CRYPTO)/include
+SGXSSL_CRYPTO_INCLUDE_PATH ?= $(SGXSSL_CRYPTO)/include/crypto
+SGXSSL_TRUSTED_LIB_PATH ?= $(SGXSSL_CRYPTO)/lib64
 
-SGX_SDK := /opt/intel/sgxsdk/
-SGXSSL_INCLUDE_PATH ?= /opt/intel/sgxssl/include
-SGXSSL_CRYPTO_INCLUDE_PATH ?= /opt/intel/sgxssl/include/crypto
-SGXSSL_TRUSTED_LIB_PATH ?= /opt/intel/sgxssl/lib64
-
-SGX_MODE := HW
-SGX_ARCH := x64
 SGX_DEBUG := 1
-KS_SGX_SRC := /home/jiangyan/workspace/ks-sgx
-TOP_DIR := /home/jiangyan/workspace/incubator-teaclave-sgx-sdk/
+KS_SGX_SRC ?= /home/jiangyan/workspace/ks-sgx
+TOP_DIR := $(SGX_SDK_RUST)
 
-include $(TOP_DIR)/buildenv.mk
+include $(SGX_SDK_RUST)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)
 	SGX_ARCH := x86
@@ -146,7 +146,7 @@ $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
 
 $(Signed_RustEnclave_Name): $(KS_SGX_SRC)/libenclave_ks.signed.so
 	mkdir -p bin
-	cp $(KS_SGX_SRC)/libenclave_ks.signed.so bin/
+	cp $(KS_SGX_SRC)/libenclave_ks.signed.so bin/enclave.signed.so
 
 # .PHONY: enclave
 # enclave:
@@ -155,5 +155,5 @@ $(Signed_RustEnclave_Name): $(KS_SGX_SRC)/libenclave_ks.signed.so
 
 .PHONY: clean
 clean:
-	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/libenclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
+	@rm -f $(App_Name) $(App_Enclave_u_Object) bin/enclave_ks.signed.so app/Enclave_KS_u.h app/Enclave_KS_u.c app/Enclave_KS_u.o
 	@cd app && cargo clean && rm -f Cargo.lock
