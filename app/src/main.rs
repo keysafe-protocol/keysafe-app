@@ -129,7 +129,14 @@ fn load_conf(fname: &str) -> HashMap<String, String> {
 /// Report to chain that current node is up and running
 /// Read account information from environment variable
 async fn register_node(phrase: &str) {
-    let api = OnlineClient::<PolkadotConfig>::new().await.unwrap();
+    let api = OnlineClient::<PolkadotConfig>::new().await;
+    match api {
+        Ok(api) => info!("Rpc connected."),
+        Err(err) => {
+            error!("Error registering");
+            return;
+        }
+    } 
     let pair = sr25519::Pair::from_string(phrase, None).unwrap();
     let signer = PairSigner::new(pair);
     // call register_node when start up
