@@ -86,6 +86,6 @@
   git clone https://github.com/keysafe-protocol/keysafe-front
   git checkout polkadot
   docker build -t keysafe-frontend .
-  docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://127.0.0.1:30000/ks' keysafe-frontend
+  docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://<your-ip-address>:30000/ks' keysafe-frontend
 ```
-+ visit http://127.0.0.1:3000 to open the website
++ visit http://<your-ip-address>:3000 to open the website
