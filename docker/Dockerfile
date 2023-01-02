@@ -16,6 +16,6 @@ ENV SGXSSL_CRYPTO=/opt/intel/sgxssl/
 ADD get_ks_sgx.sh /root
 RUN bash /root/get_ks_sgx.sh
 
-ENV KS_SGX_SRC=/root/ks-sgx/
+ENV KS_SGX_SRC=/root/keysafe-sgx/
 
 WORKDIR /root 
