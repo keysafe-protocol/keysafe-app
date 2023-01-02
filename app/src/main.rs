@@ -187,6 +187,7 @@ async fn main() -> std::io::Result<()> {
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
     let server_url = format!("0.0.0.0:{}", conf.get("node_api_port").unwrap());
+    let server_port: u16 = conf.get("node_api_port").unwrap().parse().unwrap();
     HttpServer::new(move || {
         let cors = Cors::permissive();
         App::new()
@@ -215,7 +216,8 @@ async fn main() -> std::io::Result<()> {
             .service(web3_cond)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
-    .bind_openssl(server_url, builder)?
+   // .bind_openssl(server_url, builder)?
+    .bind(("0.0.0.0", server_port))?
     .run()
     .await
 }
