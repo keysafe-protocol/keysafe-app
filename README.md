@@ -62,8 +62,9 @@
 ```
 + inside docker instance, build package
 ```
+  bash /root/get_ks_sgx.sh
   cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/;
-  make SGX_MODE=SW
+  make -f MakeHwFile SGX_MODE=SW 
 ```
 + inside docker instance, run unit test
 ```
