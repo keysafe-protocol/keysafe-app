@@ -92,11 +92,20 @@
 
 ## use case
 + click login for the first time
++ <img width="274" alt="image" src="https://user-images.githubusercontent.com/1289853/210266460-916595b4-b684-45d4-92b0-044263a4aad0.png">
+
 + input your email account
++ <img width="464" alt="image" src="https://user-images.githubusercontent.com/1289853/210266518-19591001-1d0f-428f-8aae-ad715569908c.png">
+
 + when running in dev mode ( by default in conf.toml ), email will not be sent, confirm code is recorded in bin/logs/ks.log
 + when running in production mode, email will be sent using official email account with a confirm code.
+
 + use your confirm code to login your email account
-+ when saving your secret key, you will have 4 options, email/passwd/google-auth/github-oauth.
-  + email/passwd/google-auth will be available by default
-  + you need a client-id and client-secret to use github-oauth.
+
++ when saving your secret key, you will have 4 options, email/passwd/gauth/oauth@github.
++ <img width="276" alt="image" src="https://user-images.githubusercontent.com/1289853/210266717-5dd80cf4-0971-4d80-be5a-0f7432287088.png">
+  + email/passwd/gauth will be available by default
+  + <img width="446" alt="image" src="https://user-images.githubusercontent.com/1289853/210266792-c14f263b-4cad-4dc4-b034-6e4a5fee41bc.png">
+  + <img width="596" alt="image" src="https://user-images.githubusercontent.com/1289853/210266822-3409392d-2614-4507-9f95-5252b7ba004b.png">
+  + you need a client-id and client-secret to use oauth@github.
 + when recovering your secret key, prove yourself with 2 of the 3 conditions above, e.g. email + passwd or email + google-auth.
