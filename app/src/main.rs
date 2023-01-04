@@ -129,14 +129,14 @@ fn load_conf(fname: &str) -> HashMap<String, String> {
 /// Report to chain that current node is up and running
 /// Read account information from environment variable
 async fn register_node(phrase: &str) {
-    let api = OnlineClient::<PolkadotConfig>::new().await;
-    match api {
-        Ok(api) => info!("Rpc connected."),
+    let apir = OnlineClient::<PolkadotConfig>::new().await;
+    let api = match apir {
+        Ok(api) => api,
         Err(err) => {
             error!("Error registering");
             return;
         }
-    } 
+    };
     let pair = sr25519::Pair::from_string(phrase, None).unwrap();
     let signer = PairSigner::new(pair);
     // call register_node when start up
@@ -187,6 +187,7 @@ async fn main() -> std::io::Result<()> {
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
     let server_url = format!("0.0.0.0:{}", conf.get("node_api_port").unwrap());
+    let server_port: u16 = conf.get("node_api_port").unwrap().parse().unwrap();
     HttpServer::new(move || {
         let cors = Cors::permissive();
         App::new()
@@ -215,7 +216,8 @@ async fn main() -> std::io::Result<()> {
             .service(web3_cond)
             .service(afs::Files::new("/", "./public").index_file("index.html"))
     })
-    .bind_openssl(server_url, builder)?
+   // .bind_openssl(server_url, builder)?
+    .bind(("0.0.0.0", server_port))?
     .run()
     .await
 }

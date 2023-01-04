@@ -62,8 +62,9 @@
 ```
 + inside docker instance, build package
 ```
+  bash /root/get_ks_sgx.sh
   cd /root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app/;
-  make SGX_MODE=SW
+  make -f MakeHwFile SGX_MODE=SW 
 ```
 + inside docker instance, run unit test
 ```
@@ -77,7 +78,7 @@
 + start service, once started, ./app stucks waiting for requests
 ```
   export KS_ACCOUNT="zone envelope fish dolphin cup conduct burden tomato uphold final wood dune"
-  ./app
+  ./app &
 ```
 + start front-end 
 ```
@@ -85,6 +86,27 @@
   git clone https://github.com/keysafe-protocol/keysafe-front
   git checkout polkadot
   docker build -t keysafe-frontend .
-  docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://127.0.0.1:30000/ks' keysafe-frontend
+  docker run --rm -p 3000:3000 -e REACT_APP_BASE_URL='https://<your-ip-address>:30000/ks' keysafe-frontend
 ```
-+ visit http://127.0.0.1:3000 to open the website
++ visit http://your-ip-address:3000 to open the website
+
+## use case
++ click login for the first time
++ <img width="274" alt="image" src="https://user-images.githubusercontent.com/1289853/210266460-916595b4-b684-45d4-92b0-044263a4aad0.png">
+
++ input your email account
++ <img width="464" alt="image" src="https://user-images.githubusercontent.com/1289853/210266518-19591001-1d0f-428f-8aae-ad715569908c.png">
+
++ when running in dev mode ( by default in conf.toml ), email will not be sent, confirm code is recorded in bin/logs/ks.log
++ when running in production mode, email will be sent using official email account with a confirm code.
+
++ use your confirm code to login your email account
+
++ when saving your secret key, you will have 4 options, email/passwd/gauth/oauth@github.
++ <img width="276" alt="image" src="https://user-images.githubusercontent.com/1289853/210266717-5dd80cf4-0971-4d80-be5a-0f7432287088.png">
++ <img width="446" alt="image" src="https://user-images.githubusercontent.com/1289853/210266792-c14f263b-4cad-4dc4-b034-6e4a5fee41bc.png">
++ **You can by pass the oauth@Github by using other 3 functions as your recovery condition.**
++ <img width="1434" alt="image" src="https://user-images.githubusercontent.com/1289853/210267793-0e4b0fd4-4729-41a4-a3fa-d35880d719c1.png">
++ when recovering your secret key, prove yourself with 2 of the 3 conditions above, e.g. email + passwd or email + google-auth. After that, your secret key will be fully recovered.
+  + <img width="584" alt="image" src="https://user-images.githubusercontent.com/1289853/210267235-41f6305e-76b4-40ca-ab0f-e96ea41013ef.png">
+  + <img width="571" alt="image" src="https://user-images.githubusercontent.com/1289853/210267279-86988315-1657-41e2-b0db-bd22d8b34956.png">

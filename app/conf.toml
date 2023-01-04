@@ -1,4 +1,4 @@
-env = ""
+env = "dev"
 email_account = "verify@keysafe.network"
 email_password = ""
 email_server = ""

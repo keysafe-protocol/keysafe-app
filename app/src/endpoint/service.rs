@@ -221,8 +221,10 @@ impl PartialEq for Coin {
     }
 }
 
-#[get("/ks/info")]
+
+#[post("/ks/info")]
 pub async fn info(
+    info_req: web::Json<BaseReq>,
     req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
@@ -230,13 +232,9 @@ pub async fn info(
         req.headers().get("Authorization"),
         &endex.conf["secret"].as_str()
     );
-    if let None = claims {
-        info!("authorization fail for token verify");
-        return HttpResponse::Ok().json(BaseResp {status: FAIL.to_string()});
-    }
     let claims2 = claims.unwrap();
     let account = claims2.sub.to_string();
-    info!("account is {}", account);
+    println!("account is {}", account);
     let mut v = Vec::new();
     let stmt = format!(
         "select * from user_secret where kid = '{}'", 
@@ -268,6 +266,7 @@ pub async fn info(
     v.dedup();
     HttpResponse::Ok().json(InfoResp {status: SUCC.to_string(), data: v})
 }
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InfoMailResp {
@@ -653,7 +652,6 @@ pub async fn unseal(
             return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
     } else if &unseal_req.cond_type == "gauth" {
-        /*
         //let sealed_gauth = hex::decode(cond_value).expect("Decode failed.");
         let mut sgx_result = sgx_status_t::SGX_SUCCESS;
         println!("gauth {} with code {}", cond_value, unseal_req.cipher_cond_value.parse::<i32>().unwrap());
@@ -672,7 +670,6 @@ pub async fn unseal(
             sgx_status_t::SGX_SUCCESS => {},
             _ => return HttpResponse::Ok().json(BaseResp{status: FAIL.to_string()})
         }
-        */
     } else if &unseal_req.cond_type == "oauth@github" {
         let client_id = conf.get("github_client_id").unwrap();
         let client_secret = conf.get("github_client_secret").unwrap();
