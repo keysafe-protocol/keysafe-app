@@ -130,6 +130,7 @@ app/Enclave_KS_u.o: $(KS_SGX_SRC)/App/Enclave_KS_u.o
 
 # 生成 enclave 的静态链接库.a，需要库.o
 $(App_Enclave_u_Object): app/Enclave_KS_u.o
+	@mkdir -p lib
 	$(AR) rcsD $@ $^
 
 $(App_Name): $(App_Enclave_u_Object) $(App_SRC_Files)
