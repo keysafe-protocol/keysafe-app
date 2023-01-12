@@ -44,17 +44,17 @@
 + login mysql docker instance to setup db 
 ```
   docker exec -it ks-db bash
-  # inside docker, create db, user and schema
-  mysql -h localhost -u root -pks123
-  copy app/schema.sql to mysql shell
-  exit # mysql shell
-  exit # mysql docker instance
+  touch schema.sql
+  cat > schema.sql
+  # paste the content of app/schema.sql, use ctrl-d to exit
+  mysql -h localhost -u root -pks123 < schema.sql 
+  exit
 ```
 + build keysafe-app docker instance
 ```
   git clone https://github.com/keysafe-protocol/keysafe-app.git
   cd keysafe-app
-  git checkout polkadot
+  **git checkout polkadot**
   cd docker
   docker build -t ks01 -f Dockerfile .
   cd ..
